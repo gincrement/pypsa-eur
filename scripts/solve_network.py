@@ -1416,6 +1416,7 @@ def collect_kwargs(
     solve_kwargs["assign_all_duals"] = cf_solving.get("assign_all_duals", False)
     solve_kwargs["io_api"] = cf_solving.get("io_api", None)
     solve_kwargs["keep_files"] = cf_solving.get("keep_files", False)
+    solve_kwargs["include_objective_constant"] = cf_solving.get("include_objective_constant", True)
 
     if log_fn:
         solve_kwargs["log_fn"] = log_fn
