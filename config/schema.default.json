@@ -2914,6 +2914,89 @@
           "description": "The emissions from oil fuel processing (e.g. oil in petrochemical refinieries). The default value of 0.013 tCO2/MWh is based on DE statistics for 2019; the EU value is very similar.",
           "type": "number"
         },
+        "additional_flat_load": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "Additional constant electricity demand in MW per country (e.g. `{DE: 100}`), added to the AC bus(es) of that country with carrier `industry electricity`.",
+          "type": "object"
+        },
+        "hourly_matching": {
+          "description": "Configuration for `industry.hourly_matching` settings.",
+          "properties": {
+            "target": {
+              "default": 0.0,
+              "description": "Matching level of the `additional_flat_load`, e.g. 0.9 for 90%. 0 disables hourly matching (load supplied from the grid). Above 0, the load is supplied from dedicated, newly built VRE and storage subject to an hourly matching constraint added in `scripts/custom_extra_functionality.py`. See `mode` and `target_scope`.",
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            "mode": {
+              "default": "hourly",
+              "description": "Matching granularity: calendar periods (clock hours, days, weeks starting Monday, months, years) within which own VRE generation incl. storage and otherwise curtailed grid imports must match consumption. Within a period, excess exports offset grid imports. Snapshots are assigned to the period in which they start, so sub-hourly snapshots are summed per clock hour.",
+              "enum": [
+                "hourly",
+                "daily",
+                "weekly",
+                "monthly",
+                "annual"
+              ],
+              "type": "string"
+            },
+            "target_scope": {
+              "default": "period",
+              "description": "`period`: `target` must be met in every matching period. `annual`: `target` is the share of the annual consumption matched at the granularity of `mode`, i.e. unmatched energy can be distributed across periods (24/7 CFE score). Both are identical for `mode: annual` and for `target: 1`.",
+              "enum": [
+                "period",
+                "annual"
+              ],
+              "type": "string"
+            },
+            "carriers": {
+              "description": "Generator carriers the consumer may build. Costs and profiles are copied from the node; land potentials are shared with the grid generators.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "storage": {
+              "description": "Storage technologies the consumer may build.",
+              "items": {
+                "enum": [
+                  "battery",
+                  "H2"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "curtailed_import": {
+              "default": true,
+              "description": "Allow grid imports of electricity that would otherwise be curtailed (grid VRE of `curtailment_carriers` in the same country and hour) and count them as matched.",
+              "type": "boolean"
+            },
+            "curtailment_carriers": {
+              "description": "Grid generator carriers whose curtailment may be imported as matched electricity.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "max_excess_share": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Upper bound on annual excess exports to the grid as share of the consumption (e.g. 0.2). `null` means unlimited."
+            }
+          }
+        },
         "temporal_electricity_industry_load": {
           "default": true,
           "description": "Use hourly load profiles per industry branch for the industrial electricity demand instead of a flat profile. The profiles from [FfE](https://opendata.ffe.de/dataset/normalized-industrial-electrical-load-profiles-germany/) are for Germany and are applied to all countries.",
@@ -6425,7 +6508,7 @@
                   "type": "null"
                 }
               ],
-              "default": "../data/custom_extra_functionality.py",
+              "default": "../scripts/custom_extra_functionality.py",
               "description": "Path to a Python file with custom extra functionality code to be injected into the solving rules of the workflow relative to `rules` directory."
             },
             "io_api": {
@@ -8521,6 +8604,82 @@
         }
       }
     },
+    "_HourlyMatchingConfig": {
+      "description": "Configuration for `industry.hourly_matching` settings.",
+      "properties": {
+        "target": {
+          "default": 0.0,
+          "description": "Matching level of the `additional_flat_load`, e.g. 0.9 for 90%. 0 disables hourly matching (load supplied from the grid). Above 0, the load is supplied from dedicated, newly built VRE and storage subject to an hourly matching constraint added in `scripts/custom_extra_functionality.py`. See `mode` and `target_scope`.",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "mode": {
+          "default": "hourly",
+          "description": "Matching granularity: calendar periods (clock hours, days, weeks starting Monday, months, years) within which own VRE generation incl. storage and otherwise curtailed grid imports must match consumption. Within a period, excess exports offset grid imports. Snapshots are assigned to the period in which they start, so sub-hourly snapshots are summed per clock hour.",
+          "enum": [
+            "hourly",
+            "daily",
+            "weekly",
+            "monthly",
+            "annual"
+          ],
+          "type": "string"
+        },
+        "target_scope": {
+          "default": "period",
+          "description": "`period`: `target` must be met in every matching period. `annual`: `target` is the share of the annual consumption matched at the granularity of `mode`, i.e. unmatched energy can be distributed across periods (24/7 CFE score). Both are identical for `mode: annual` and for `target: 1`.",
+          "enum": [
+            "period",
+            "annual"
+          ],
+          "type": "string"
+        },
+        "carriers": {
+          "description": "Generator carriers the consumer may build. Costs and profiles are copied from the node; land potentials are shared with the grid generators.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "storage": {
+          "description": "Storage technologies the consumer may build.",
+          "items": {
+            "enum": [
+              "battery",
+              "H2"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "curtailed_import": {
+          "default": true,
+          "description": "Allow grid imports of electricity that would otherwise be curtailed (grid VRE of `curtailment_carriers` in the same country and hour) and count them as matched.",
+          "type": "boolean"
+        },
+        "curtailment_carriers": {
+          "description": "Grid generator carriers whose curtailment may be imported as matched electricity.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "max_excess_share": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Upper bound on annual excess exports to the grid as share of the consumption (e.g. 0.2). `null` means unlimited."
+        }
+      }
+    },
     "_HydroConfig": {
       "description": "Configuration for hydropower.",
       "properties": {
@@ -10016,7 +10175,7 @@
               "type": "null"
             }
           ],
-          "default": "../data/custom_extra_functionality.py",
+          "default": "../scripts/custom_extra_functionality.py",
           "description": "Path to a Python file with custom extra functionality code to be injected into the solving rules of the workflow relative to `rules` directory."
         },
         "io_api": {
@@ -14444,6 +14603,89 @@
           "description": "The emissions from oil fuel processing (e.g. oil in petrochemical refinieries). The default value of 0.013 tCO2/MWh is based on DE statistics for 2019; the EU value is very similar.",
           "type": "number"
         },
+        "additional_flat_load": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "Additional constant electricity demand in MW per country (e.g. `{DE: 100}`), added to the AC bus(es) of that country with carrier `industry electricity`.",
+          "type": "object"
+        },
+        "hourly_matching": {
+          "description": "Configuration for `industry.hourly_matching` settings.",
+          "properties": {
+            "target": {
+              "default": 0.0,
+              "description": "Matching level of the `additional_flat_load`, e.g. 0.9 for 90%. 0 disables hourly matching (load supplied from the grid). Above 0, the load is supplied from dedicated, newly built VRE and storage subject to an hourly matching constraint added in `scripts/custom_extra_functionality.py`. See `mode` and `target_scope`.",
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            "mode": {
+              "default": "hourly",
+              "description": "Matching granularity: calendar periods (clock hours, days, weeks starting Monday, months, years) within which own VRE generation incl. storage and otherwise curtailed grid imports must match consumption. Within a period, excess exports offset grid imports. Snapshots are assigned to the period in which they start, so sub-hourly snapshots are summed per clock hour.",
+              "enum": [
+                "hourly",
+                "daily",
+                "weekly",
+                "monthly",
+                "annual"
+              ],
+              "type": "string"
+            },
+            "target_scope": {
+              "default": "period",
+              "description": "`period`: `target` must be met in every matching period. `annual`: `target` is the share of the annual consumption matched at the granularity of `mode`, i.e. unmatched energy can be distributed across periods (24/7 CFE score). Both are identical for `mode: annual` and for `target: 1`.",
+              "enum": [
+                "period",
+                "annual"
+              ],
+              "type": "string"
+            },
+            "carriers": {
+              "description": "Generator carriers the consumer may build. Costs and profiles are copied from the node; land potentials are shared with the grid generators.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "storage": {
+              "description": "Storage technologies the consumer may build.",
+              "items": {
+                "enum": [
+                  "battery",
+                  "H2"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "curtailed_import": {
+              "default": true,
+              "description": "Allow grid imports of electricity that would otherwise be curtailed (grid VRE of `curtailment_carriers` in the same country and hour) and count them as matched.",
+              "type": "boolean"
+            },
+            "curtailment_carriers": {
+              "description": "Grid generator carriers whose curtailment may be imported as matched electricity.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "max_excess_share": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Upper bound on annual excess exports to the grid as share of the consumption (e.g. 0.2). `null` means unlimited."
+            }
+          }
+        },
         "temporal_electricity_industry_load": {
           "default": true,
           "description": "Use hourly load profiles per industry branch for the industrial electricity demand instead of a flat profile. The profiles from [FfE](https://opendata.ffe.de/dataset/normalized-industrial-electrical-load-profiles-germany/) are for Germany and are applied to all countries.",
@@ -15089,7 +15331,7 @@
                   "type": "null"
                 }
               ],
-              "default": "../data/custom_extra_functionality.py",
+              "default": "../scripts/custom_extra_functionality.py",
               "description": "Path to a Python file with custom extra functionality code to be injected into the solving rules of the workflow relative to `rules` directory."
             },
             "io_api": {

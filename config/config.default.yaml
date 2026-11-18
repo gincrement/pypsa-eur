@@ -1230,6 +1230,27 @@ industry:
   hotmaps_locate_missing: false
   reference_year: 2023
   oil_refining_emissions: 0.013
+  additional_flat_load: {}
+  hourly_matching:
+    target: 0.0
+    mode: hourly
+    target_scope: period
+    carriers:
+    - onwind
+    - solar
+    storage:
+    - battery
+    - H2
+    curtailed_import: true
+    curtailment_carriers:
+    - onwind
+    - "offwind-ac"
+    - "offwind-dc"
+    - "offwind-float"
+    - solar
+    - "solar-hsat"
+    - solar rooftop
+    max_excess_share:
   temporal_electricity_industry_load: true
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration/#costs_cf
@@ -1321,7 +1342,7 @@ solving:
     skip_iterations: true
     rolling_horizon: false
     seed: 123
-    custom_extra_functionality: ../data/custom_extra_functionality.py
+    custom_extra_functionality: ../scripts/custom_extra_functionality.py
     io_api:
     track_iterations: false
     min_iterations: 2

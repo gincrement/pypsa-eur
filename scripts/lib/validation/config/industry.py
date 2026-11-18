@@ -8,9 +8,59 @@ Industry configuration.
 See docs in https://pypsa-eur.readthedocs.io/en/latest/configuration/#industry_cf
 """
 
+from typing import Literal
+
 from pydantic import Field
 
 from scripts.lib.validation.config._base import ConfigModel
+
+
+class _HourlyMatchingConfig(ConfigModel):
+    """Configuration for `industry.hourly_matching` settings."""
+
+    target: float = Field(
+        0.0,
+        ge=0.0,
+        le=1.0,
+        description="Matching level of the `additional_flat_load`, e.g. 0.9 for 90%. 0 disables hourly matching (load supplied from the grid). Above 0, the load is supplied from dedicated, newly built VRE and storage subject to an hourly matching constraint added in `scripts/custom_extra_functionality.py`. See `mode` and `target_scope`.",
+    )
+    mode: Literal["hourly", "daily", "weekly", "monthly", "annual"] = Field(
+        "hourly",
+        description="Matching granularity: calendar periods (clock hours, days, weeks starting Monday, months, years) within which own VRE generation incl. storage and otherwise curtailed grid imports must match consumption. Within a period, excess exports offset grid imports. Snapshots are assigned to the period in which they start, so sub-hourly snapshots are summed per clock hour.",
+    )
+    target_scope: Literal["period", "annual"] = Field(
+        "period",
+        description="`period`: `target` must be met in every matching period. `annual`: `target` is the share of the annual consumption matched at the granularity of `mode`, i.e. unmatched energy can be distributed across periods (24/7 CFE score). Both are identical for `mode: annual` and for `target: 1`.",
+    )
+    carriers: list[str] = Field(
+        default_factory=lambda: ["onwind", "solar"],
+        description="Generator carriers the consumer may build. Costs and profiles are copied from the node; land potentials are shared with the grid generators.",
+    )
+    storage: list[Literal["battery", "H2"]] = Field(
+        default_factory=lambda: ["battery", "H2"],
+        description="Storage technologies the consumer may build.",
+    )
+    curtailed_import: bool = Field(
+        True,
+        description="Allow grid imports of electricity that would otherwise be curtailed (grid VRE of `curtailment_carriers` in the same country and hour) and count them as matched.",
+    )
+    curtailment_carriers: list[str] = Field(
+        default_factory=lambda: [
+            "onwind",
+            "offwind-ac",
+            "offwind-dc",
+            "offwind-float",
+            "solar",
+            "solar-hsat",
+            "solar rooftop",
+        ],
+        description="Grid generator carriers whose curtailment may be imported as matched electricity.",
+    )
+    max_excess_share: float | None = Field(
+        None,
+        ge=0.0,
+        description="Upper bound on annual excess exports to the grid as share of the consumption (e.g. 0.2). `null` means unlimited.",
+    )
 
 
 class IndustryConfig(ConfigModel):
@@ -219,6 +269,14 @@ class IndustryConfig(ConfigModel):
     oil_refining_emissions: float = Field(
         0.013,
         description="The emissions from oil fuel processing (e.g. oil in petrochemical refinieries). The default value of 0.013 tCO2/MWh is based on DE statistics for 2019; the EU value is very similar.",
+    )
+    additional_flat_load: dict[str, float] = Field(
+        default_factory=dict,
+        description="Additional constant electricity demand in MW per country (e.g. `{DE: 100}`), added to the AC bus(es) of that country with carrier `industry electricity`.",
+    )
+    hourly_matching: _HourlyMatchingConfig = Field(
+        default_factory=_HourlyMatchingConfig,
+        description="Hourly matching of the `additional_flat_load`.",
     )
     temporal_electricity_industry_load: bool = Field(
         True,

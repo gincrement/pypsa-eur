@@ -6692,6 +6692,164 @@ def add_import_options(
         )
 
 
+def add_additional_flat_load(
+    n: pypsa.Network, loads_mw: dict, matching: dict | None = None
+) -> None:
+    """
+    Add a constant electricity demand (MW) per country, e.g. a new industrial
+    consumer, at the country's AC bus with the largest electricity demand.
+
+    If ``matching["target"] > 0``, the consumer gets its own bus ``"<node> CI"``
+    with dedicated, newly built VRE generators and storage, connected to the
+    grid by an import link (unmatched), an optional import link for otherwise
+    curtailed grid VRE (matched) and an export link. The hourly matching constraint
+    itself is added at solve time in ``scripts/custom_extra_functionality.py``,
+    which reads its settings from ``n.meta["hourly_matching"]``.
+    """
+    matching = matching or {}
+    use_matching = matching.get("target", 0.0) > 0
+    ci_nodes = []
+
+    for ct, p_mw in (loads_mw or {}).items():
+        if not p_mw:
+            continue
+        buses = n.buses.index[(n.buses.carrier == "AC") & (n.buses.country == ct)]
+        if buses.empty:
+            raise ValueError(f"additional_flat_load: no AC bus found for '{ct}'.")
+        el_loads = n.loads[n.loads.bus.isin(buses)]
+        demand = (
+            n.loads_t.p_set.reindex(columns=el_loads.index, fill_value=0.0)
+            .mean()
+            .add(el_loads.p_set, fill_value=0.0)
+            .groupby(el_loads.bus)
+            .sum()
+            .reindex(buses, fill_value=0.0)
+        )
+        node = demand.idxmax()
+
+        if not use_matching:
+            logger.info(f"Adding flat additional load of {p_mw} MW at {node}.")
+            n.add(
+                "Load",
+                node,
+                suffix=" additional flat load",
+                bus=node,
+                carrier="industry electricity",
+                p_set=p_mw,
+            )
+            continue
+
+        logger.info(
+            f"Adding flat additional load of {p_mw} MW at {node} with hourly "
+            f"matching (target {matching['target']:.0%}, mode {matching['mode']})."
+        )
+        ci = f"{node} CI"
+        ci_nodes.append(ci)
+        n.add("Bus", ci, carrier="AC", location=node, country=ct, unit="MW")
+        n.add(
+            "Load",
+            ci,
+            suffix=" additional flat load",
+            bus=ci,
+            carrier="industry electricity",
+            p_set=p_mw,
+        )
+
+        # grid connection; imports count as unmatched, imports of otherwise
+        # curtailed grid VRE as matched, exports as excess
+        names = [f"{ci} grid import", f"{ci} grid export"]
+        carriers = ["CI grid import", "CI grid export"]
+        if matching.get("curtailed_import", True):
+            names.append(f"{ci} curtailment import")
+            carriers.append("CI curtailment import")
+        n.add(
+            "Link",
+            names,
+            bus0=[ci if "export" in i else node for i in names],
+            bus1=[node if "export" in i else ci for i in names],
+            carrier=carriers,
+            p_nom=1e6,
+            efficiency=1.0,
+        )
+
+        # dedicated newly built VRE, copying costs and profiles of the node
+        gens = n.generators.index[
+            (n.generators.bus == node)
+            & n.generators.carrier.isin(matching["carriers"])
+            & n.generators.p_nom_extendable
+        ]
+        if gens.empty:
+            raise ValueError(f"hourly_matching: no extendable VRE found at {node}.")
+        new = n.generators.loc[gens].copy()
+        new.index = new.index + " CI"
+        new["bus"] = ci
+        new[["p_nom", "p_nom_min"]] = 0.0
+        new["build_year"] = n.generators.loc[gens, "build_year"].values
+        n.add("Generator", new.index, **new)
+        p_max_pu = n.generators_t.p_max_pu.reindex(columns=gens)
+        p_max_pu.columns = p_max_pu.columns + " CI"
+        n.generators_t.p_max_pu[p_max_pu.columns] = p_max_pu.fillna(
+            new["p_max_pu"]
+        )
+
+        # dedicated newly built storage, copying costs of the node
+        def copy(c, names, rename, bus_map):
+            df = n.static(c).loc[names].copy()
+            df.index = [rename(i) for i in df.index]
+            for col, mapping in bus_map.items():
+                df[col] = df[col].replace(mapping)
+            if c == "Link":  # detach waste heat etc. from the grid's buses
+                for k in range(2, 5):
+                    if f"bus{k}" in df:
+                        df[f"bus{k}"] = ""
+                        df[f"efficiency{k}"] = 0.0
+            ext = "e_nom" if c == "Store" else "p_nom"
+            df[[ext, f"{ext}_min"]] = 0.0
+            df[f"{ext}_extendable"] = True
+            n.add(c, df.index, **df)
+
+        if "battery" in matching["storage"]:
+            n.add("Bus", f"{ci} battery", carrier="battery", location=node,
+                  country=ct, unit="MWh")
+            m = {node: ci, f"{node} battery": f"{ci} battery"}
+            copy("Store", [f"{node} battery"],
+                 lambda i: i.replace(node, ci), {"bus": m})
+            # charger before discharger keeps add_battery_constraints pairing
+            copy("Link", [f"{node} battery charger", f"{node} battery discharger"],
+                 lambda i: i.replace(node, ci), {"bus0": m, "bus1": m})
+
+        if "H2" in matching["storage"]:
+            reconv = [
+                i for i in [f"{node} H2 Fuel Cell", f"{node} H2 turbine"]
+                if i in n.links.index
+            ]
+            n.add("Bus", f"{ci} H2", carrier="H2", location=node, country=ct,
+                  unit="MWh_LHV")
+            m = {node: ci, f"{node} H2": f"{ci} H2"}
+            copy("Store", [f"{node} H2 Store"],
+                 lambda i: i.replace(node, ci), {"bus": m})
+            copy("Link", [f"{node} H2 Electrolysis"] + reconv[:1],
+                 lambda i: i.replace(node, ci), {"bus0": m, "bus1": m})
+
+    if ci_nodes:
+        carriers = ["CI grid import", "CI grid export", "CI curtailment import"]
+        n.add(
+            "Carrier",
+            carriers,
+            color=["#8a8a8a", "#c7c7c7", "#b5d99c"],
+            nice_name=carriers,
+            overwrite=True,
+        )
+        n.meta["hourly_matching"] = dict(
+            nodes=ci_nodes,
+            target=float(matching["target"]),
+            mode=matching["mode"],
+            target_scope=matching.get("target_scope", "period"),
+            max_excess_share=matching.get("max_excess_share"),
+            curtailment_carriers=list(matching.get("curtailment_carriers", [])),
+        )
+
+
 def main(
     n: pypsa.Network,
     inputs,
@@ -7015,5 +7173,11 @@ def main(
     )
     if options["cluster_heat_buses"] and not first_year_myopic:
         cluster_heat_buses(n)
+
+    add_additional_flat_load(
+        n,
+        cf_industry.get("additional_flat_load", {}),
+        cf_industry.get("hourly_matching", {}),
+    )
 
     logger.info("Completed sector components")
