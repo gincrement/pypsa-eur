@@ -1,0 +1,130 @@
+# base case 
+base: {}
+
+# ----- Scenario settings -----
+# <ct>-100MW-hm<level> ... with hourly matching <level>
+
+# ----- DE Germany
+DE-100MW-hm80:
+  industry:
+    additional_flat_load: {DE: 100}
+    hourly_matching:
+      target: 0.8
+
+DE-100MW-hm90:
+  industry:
+    additional_flat_load: {DE: 100}
+    hourly_matching:
+      target: 0.9
+
+DE-100MW-hm95:
+  industry:
+    additional_flat_load: {DE: 100}
+    hourly_matching:
+      target: 0.95
+
+DE-100MW-hm100:
+  industry:
+    additional_flat_load: {DE: 100}
+    hourly_matching:
+      target: 1.0
+
+# ----- FR France
+FR-100MW-hm80:
+  industry:
+    additional_flat_load: {FR: 100}
+    hourly_matching:
+      target: 0.8
+
+FR-100MW-hm90:
+  industry:
+    additional_flat_load: {FR: 100}
+    hourly_matching:
+      target: 0.9
+
+FR-100MW-hm95:
+  industry:
+    additional_flat_load: {FR: 100}
+    hourly_matching:
+      target: 0.95
+
+FR-100MW-hm100:
+  industry:
+    additional_flat_load: {FR: 100}
+    hourly_matching:
+      target: 1.0
+
+# ----- PL Poland
+PL-100MW-hm80:
+  industry:
+    additional_flat_load: {PL: 100}
+    hourly_matching:
+      target: 0.8
+
+PL-100MW-hm90:
+  industry:
+    additional_flat_load: {PL: 100}
+    hourly_matching:
+      target: 0.9
+
+PL-100MW-hm95:
+  industry:
+    additional_flat_load: {PL: 100}
+    hourly_matching:
+      target: 0.95
+
+PL-100MW-hm100:
+  industry:
+    additional_flat_load: {PL: 100}
+    hourly_matching:
+      target: 1.0
+
+# ----- ES Spain
+ES-100MW-hm80:
+  industry:
+    additional_flat_load: {ES: 100}
+    hourly_matching:
+      target: 0.8
+
+ES-100MW-hm90:
+  industry:
+    additional_flat_load: {ES: 100}
+    hourly_matching:
+      target: 0.9
+
+ES-100MW-hm95:
+  industry:
+    additional_flat_load: {ES: 100}
+    hourly_matching:
+      target: 0.95
+
+ES-100MW-hm100:
+  industry:
+    additional_flat_load: {ES: 100}
+    hourly_matching:
+      target: 1.0
+
+# ----- IT Italy
+IT-100MW-hm80:
+  industry:
+    additional_flat_load: {IT: 100}
+    hourly_matching:
+      target: 0.8
+
+IT-100MW-hm90:
+  industry:
+    additional_flat_load: {IT: 100}
+    hourly_matching:
+      target: 0.9
+
+IT-100MW-hm95:
+  industry:
+    additional_flat_load: {IT: 100}
+    hourly_matching:
+      target: 0.95
+
+IT-100MW-hm100:
+  industry:
+    additional_flat_load: {IT: 100}
+    hourly_matching:
+      target: 1.0

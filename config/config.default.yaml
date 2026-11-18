@@ -1343,7 +1343,7 @@ solving:
     rolling_horizon: false
     seed: 123
     custom_extra_functionality: ../scripts/custom_extra_functionality.py
-    io_api:
+    io_api: true
     track_iterations: false
     min_iterations: 2
     max_iterations: 3
