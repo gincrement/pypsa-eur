@@ -1405,6 +1405,7 @@ def collect_kwargs(
     model_kwargs["linearized_unit_commitment"] = cf_solving.get(
         "linearized_unit_commitment", False
     )
+    model_kwargs["include_objective_constant"] = cf_solving.get("include_objective_constant", True)
 
     # Solve kwargs
     solver_name = solving["solver"]["name"]
@@ -1413,10 +1414,9 @@ def collect_kwargs(
     solve_kwargs = {}
     solve_kwargs["solver_name"] = solver_name
     solve_kwargs["solver_options"] = solver_options
-    solve_kwargs["assign_all_duals"] = cf_solving.get("assign_all_duals", False)
     solve_kwargs["io_api"] = cf_solving.get("io_api", None)
     solve_kwargs["keep_files"] = cf_solving.get("keep_files", False)
-    solve_kwargs["include_objective_constant"] = cf_solving.get("include_objective_constant", True)
+    solve_kwargs["assign_all_duals"] = cf_solving.get("assign_all_duals", False)
 
     if log_fn:
         solve_kwargs["log_fn"] = log_fn

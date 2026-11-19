@@ -10,3 +10,31 @@ DE-100MW-hm80:
     additional_flat_load: {DE: 100}
     hourly_matching:
       target: 0.8
+
+# ----- FR France
+FR-100MW-hm80:
+  industry:
+    additional_flat_load: {FR: 100}
+    hourly_matching:
+      target: 0.8
+
+# ----- PL Poland
+PL-100MW-hm80:
+  industry:
+    additional_flat_load: {PL: 100}
+    hourly_matching:
+      target: 0.8
+
+# ----- ES Spain
+ES-100MW-hm80:
+  industry:
+    additional_flat_load: {ES: 100}
+    hourly_matching:
+      target: 0.8
+
+# ----- IT Italy
+IT-100MW-hm80:
+  industry:
+    additional_flat_load: {IT: 100}
+    hourly_matching:
+      target: 0.8

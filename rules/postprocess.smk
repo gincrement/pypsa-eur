@@ -377,3 +377,55 @@ rule plot_interactive_bus_balance:
         ),
     script:
         scripts("plot_interactive_bus_balance.py")
+
+
+if config["run"].get("scenarios", {}).get("enable", False):
+
+    COMPARISON = (
+        "results/"
+        + (config["run"]["prefix"] + "/" if config["run"].get("prefix") else "")
+        + "comparison/"
+    )
+    def _scenario_targets(name):
+        industry = scenario_config(name).get("industry", {})
+        return dict(
+            countries=[
+                ct for ct, p in industry.get("additional_flat_load", {}).items() if p
+            ],
+            target=industry.get("hourly_matching", {}).get("target", 0.0),
+        )
+
+    rule compare_scenarios_horizon:
+        """Compares average marginal prices in the target countries and installed capacities of all scenarios against the base scenario for one planning horizon."""
+        input:
+            networks=lambda w: [
+                RESULTS.format(run=run) + f"networks/solved_{w.horizon}.nc"
+                for run in config["run"]["name"]
+            ],
+        output:
+            prices=COMPARISON + "{horizon}/prices.csv",
+            capacities=COMPARISON + "{horizon}/capacities.csv",
+            capacity_difference=COMPARISON + "{horizon}/capacity_difference.csv",
+            plot=COMPARISON + "{horizon}/comparison.pdf",
+        log:
+            COMPARISON + "{horizon}/logs/compare_scenarios.log",
+        benchmark:
+            COMPARISON + "{horizon}/benchmarks/compare_scenarios"
+        resources:
+            mem_mb=8000,
+        params:
+            runs=lambda w: [(run, int(w.horizon)) for run in config["run"]["name"]],
+            base_scenario="base",
+            scenarios={run: _scenario_targets(run) for run in config["run"]["name"]},
+            threshold=0.1,  # MW / MWh, rows kept in capacity_difference.csv
+            plot_threshold=1.0,  # MW / MWh, rows shown in comparison.pdf
+        script:
+            scripts("compare_scenarios.py")
+
+    rule compare_scenarios:
+        """Collects the scenario comparisons for all planning horizons of the loaded config, each in results/comparison/<horizon>/."""
+        input:
+            expand(
+                COMPARISON + "{horizon}/comparison.pdf",
+                horizon=config["planning_horizons"],
+            ),

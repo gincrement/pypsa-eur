@@ -1343,6 +1343,8 @@ solving:
     rolling_horizon: false
     seed: 123
     custom_extra_functionality: ../scripts/custom_extra_functionality.py
+    assign_all_duals: true
+    include_objective_constant: true
     io_api: true
     track_iterations: false
     min_iterations: 2
