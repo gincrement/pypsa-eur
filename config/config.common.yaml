@@ -10,8 +10,8 @@ run:
   name: all  # runs every scenario in config/scenarios.yaml
   scenarios:
     enable: true
-    # file: config/scenarios_some.yaml
-    file: config/scenarios_all.yaml
+    file: config/scenarios_some.yaml
+    # file: config/scenarios_all.yaml
   disable_progressbar: true
   shared_resources:
     policy: base  # share network/renewable resources; composed networks stay per scenario
@@ -30,13 +30,14 @@ clustering:
   - ["IT"]                  #
   - ["ES"]                  # > end countries of interest
   - ["PT"]
+  - ["DK"]
   - ["NL", "BE", "LU"]
   - ["GB", "IE"]
   - ["CH", "AT", "HU", "CZ", "SK"]
   - ["LV", "LT", "EE", "FI"]
   - ["SI", "HR", "BA", "RS", "ME", "MK", "XK"]
   - ["AL", "BG", "GR", "RO"]
-  - ["DK", "SE", "NO"]
+  - ["SE", "NO"]
   temporal:
     averaging: 6h # for testing
   simplify_network:
