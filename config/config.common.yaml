@@ -38,7 +38,7 @@ clustering:
   - ["AL", "BG", "GR", "RO"]
   - ["DK", "SE", "NO"]
   temporal:
-    averaging: 3h
+    averaging: 6h # for testing
   simplify_network:
     remove_stubs: false
     remove_stubs_across_borders: false
@@ -68,3 +68,15 @@ plotting:
     CI grid import: "#8a8a8a"
     CI grid export: "#c7c7c7"
     CI curtailment import: "#b5d99c"
+
+renewable:
+  onwind:
+    resource_classes: 2
+  solar:
+    resource_classes: 2
+  "offwind-ac":
+    resource_classes: 2
+  "offwind-dc":
+    resource_classes: 2
+  "offwind-float":
+    resource_classes: 2
