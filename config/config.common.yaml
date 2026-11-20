@@ -17,30 +17,26 @@ run:
     policy: base  # share network/renewable resources; composed networks stay per scenario
 
 # countries: is not needed as by default all countries are considered
-countries: ['DE', 'FR', 'ES', 'PL', 'IT', 'AT', 'CH']
-
-snapshots:
-  start: "2013-03-01 00:00"
-  end: "2013-03-07 23:00"
+# countries: ['DE', 'FR', 'ES', 'PL', 'IT', 'AT', 'CH']
 
 clustering:
   mode: administrative
   administrative:
     level: 0                 # could be "bz" for bidding zone
-#  copperplate_regions:      # will be removed in the final version
-#  - ["DE"]                  # > start countries of interest
-#  - ["FR"]                  #
-#  - ["PL"]                  #
-#  - ["IT"]                  #
-#  - ["ES"]                  # > end countries of interest
-#  - ["PT"]
-#  - ["NL", "BE", "LU"]
-#  - ["GB", "IE"]
-#  - ["CH", "AT", "HU", "CZ", "SK"]
-#  - ["LV", "LT", "EE", "FI"]
-#  - ["SI", "HR", "BA", "RS", "ME", "MK", "XK"]
-#  - ["AL", "BG", "GR", "RO"]
-#  - ["DK", "SE", "NO"]
+  copperplate_regions:      # will be removed in the final version
+  - ["DE"]                  # > start countries of interest
+  - ["FR"]                  #
+  - ["PL"]                  #
+  - ["IT"]                  #
+  - ["ES"]                  # > end countries of interest
+  - ["PT"]
+  - ["NL", "BE", "LU"]
+  - ["GB", "IE"]
+  - ["CH", "AT", "HU", "CZ", "SK"]
+  - ["LV", "LT", "EE", "FI"]
+  - ["SI", "HR", "BA", "RS", "ME", "MK", "XK"]
+  - ["AL", "BG", "GR", "RO"]
+  - ["DK", "SE", "NO"]
   temporal:
     averaging: 3h
   simplify_network:
@@ -61,7 +57,9 @@ industry:
     mode: hourly            # matching granularity: hourly | daily | weekly | monthly | annual
     target_scope: period    # period: target met in every period; annual: target = annual share matched at that granularity
     carriers: [onwind, solar]
-    storage: [battery, H2]
+    storage: [battery]
+    fix_base: true          # fix all capacities to the solved base scenario; only the CI bus may build VRE and battery
+    base_scenario: base
     curtailed_import: true  # otherwise curtailed grid VRE (same country/hour) may be imported and counts as matched
     max_excess_share:       # e.g. 0.2 to cap excess sales to the grid at 20% of consumption
 

@@ -40,6 +40,14 @@ class _HourlyMatchingConfig(ConfigModel):
         default_factory=lambda: ["battery", "H2"],
         description="Storage technologies the consumer may build.",
     )
+    fix_base: bool = Field(
+        False,
+        description="Only with `run: scenarios: enable`. Fix all capacities of every scenario (other than `base_scenario`) to the optimal capacities of the solved `base_scenario` of the same planning horizon, so that only the consumer's dedicated VRE (`carriers`) and battery can be built to meet the hourly matching at least cost. Dispatch is re-optimised. Other storage of the consumer (e.g. H2) is not built.",
+    )
+    base_scenario: str = Field(
+        "base",
+        description="Scenario whose solved capacities are fixed with `fix_base`.",
+    )
     curtailed_import: bool = Field(
         True,
         description="Allow grid imports of electricity that would otherwise be curtailed (grid VRE of `curtailment_carriers` in the same country and hour) and count them as matched.",

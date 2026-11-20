@@ -396,7 +396,7 @@ if config["run"].get("scenarios", {}).get("enable", False):
         )
 
     rule compare_scenarios_horizon:
-        """Compares average marginal prices in the target countries and installed capacities of all scenarios against the base scenario for one planning horizon."""
+        """Compares average marginal prices and installed capacities of each country specific scenario against the base scenario in its target country for one planning horizon."""
         input:
             networks=lambda w: [
                 RESULTS.format(run=run) + f"networks/solved_{w.horizon}.nc"

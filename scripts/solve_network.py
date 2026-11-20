@@ -462,6 +462,79 @@ def add_load_balance_components(
         )
 
 
+def fix_to_base(n: pypsa.Network, base: pypsa.Network, matching: dict) -> None:
+    """
+    Fix all capacities to the optimum of the solved base scenario.
+
+    Only the dedicated components of the hourly matched consumer (buses
+    ``<node> CI``) remain extendable: VRE generators of the matching
+    ``carriers`` and the battery. Their land potential is reduced by the
+    capacity the base built for the grid generator at the same node. Other
+    components that are not in the base (e.g. the consumer's H2 storage) are
+    not built. Dispatch is re-optimised.
+    """
+    attrs = {
+        "Generator": "p_nom",
+        "StorageUnit": "p_nom",
+        "Link": "p_nom",
+        "Line": "s_nom",
+        "Store": "e_nom",
+    }
+    carriers = set(matching.get("carriers", []))
+
+    for c, nom in attrs.items():
+        df = n.c[c].static
+        if df.empty:
+            continue
+        base_df = base.c[c].static
+        common = df.index.intersection(base_df.index)
+        df.loc[common, nom] = base_df.loc[common, f"{nom}_opt"]
+        df.loc[common, f"{nom}_extendable"] = False
+        if c == "Line":
+            # impedances as updated by iterative transmission expansion
+            df.loc[common, ["x", "r"]] = base_df.loc[common, ["x", "r"]]
+
+        new = df.index.difference(base_df.index)
+        ci = new[new.str.contains(" CI", regex=False)]
+        if c == "Generator":
+            keep = ci[df.loc[ci, "carrier"].isin(carriers)]
+        elif c in ("Store", "Link"):
+            keep = ci[ci.str.contains("battery", regex=False)]
+        else:
+            keep = ci[:0]
+        drop = new.difference(keep)
+        drop = drop[df.loc[drop, f"{nom}_extendable"]]
+        if not drop.empty:
+            logger.info(f"Not building {c} not in the base scenario: {list(drop)}")
+            df.loc[drop, nom] = 0.0
+            df.loc[drop, f"{nom}_extendable"] = False
+
+        if c == "Generator":
+            # land potential shared with the grid generator at the same node
+            for g in keep:
+                parent = g.removesuffix(" CI")
+                if parent not in base_df.index:
+                    continue
+                p_max = base_df.at[parent, "p_nom_max"]
+                if np.isfinite(p_max):
+                    df.at[g, "p_nom_max"] = max(
+                        p_max - base_df.at[parent, "p_nom_opt"], 0.0
+                    )
+
+    # transmission expansion limits are void with fixed lines and links
+    glc = n.c.global_constraints.static
+    tx = glc.index[glc.type.str.startswith("transmission_")]
+    if not tx.empty:
+        n.remove("GlobalConstraint", tx)
+
+    ext = {
+        c: n.c[c].static.index[n.c[c].static[f"{nom}_extendable"]].tolist()
+        for c, nom in attrs.items()
+        if not n.c[c].static.empty
+    }
+    logger.info(f"Fixed capacities to the base scenario; extendable: {ext}")
+
+
 def prepare_network(
     n: pypsa.Network,
     config: dict,
@@ -1405,7 +1478,9 @@ def collect_kwargs(
     model_kwargs["linearized_unit_commitment"] = cf_solving.get(
         "linearized_unit_commitment", False
     )
-    model_kwargs["include_objective_constant"] = cf_solving.get("include_objective_constant", True)
+    model_kwargs["include_objective_constant"] = cf_solving.get(
+        "include_objective_constant", True
+    )
 
     # Solve kwargs
     solver_name = solving["solver"]["name"]
@@ -1516,6 +1591,14 @@ if __name__ == "__main__":
     # Load network
     n = pypsa.Network(snakemake.input.network)
     planning_horizons = snakemake.wildcards.horizon
+
+    if snakemake.input.get("base_network"):
+        logger.info(f"Fixing capacities to {snakemake.input.base_network}")
+        fix_to_base(
+            n,
+            pypsa.Network(snakemake.input.base_network),
+            snakemake.config["industry"]["hourly_matching"],
+        )
 
     # Prepare network (settings before solving)
     prepare_network(

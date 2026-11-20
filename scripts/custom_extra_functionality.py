@@ -30,7 +30,11 @@ def matching_periods(snapshots: pd.Index, mode: str) -> pd.Series:
     freq = MATCHING_PERIODS[mode][0]
     if isinstance(snapshots, pd.MultiIndex):
         ts = pd.DatetimeIndex(snapshots.get_level_values(-1))
-        keys = snapshots.get_level_values(0).astype(str) + "|" + ts.to_period(freq).astype(str)
+        keys = (
+            snapshots.get_level_values(0).astype(str)
+            + "|"
+            + ts.to_period(freq).astype(str)
+        )
     else:
         keys = pd.DatetimeIndex(snapshots).to_period(freq).astype(str)
     codes, labels = pd.factorize(keys)
@@ -76,14 +80,12 @@ def add_hourly_matching_constraints(n, snapshots):
     p_link = m["Link-p"]
     p_nom_gen = m["Generator-p_nom"]
     p_gen = m["Generator-p"]
-    ext_gen = n.generators.index[n.generators.p_nom_extendable]
-    bus_country = n.generators.bus.map(n.buses.country)
+    ext_gen = n.c.generators.static.index[n.c.generators.static.p_nom_extendable]
+    bus_country = n.c.generators.static.bus.map(n.c.buses.static.country)
 
     for ci in cfg["nodes"]:
-        load_i = n.loads.index[n.loads.bus == ci]
-        load = (
-            n.get_switchable_as_dense("Load", "p_set", snapshots)[load_i].sum(axis=1)
-        )
+        load_i = n.c.loads.static.index[n.c.loads.static.bus == ci]
+        load = n.get_switchable_as_dense("Load", "p_set", snapshots)[load_i].sum(axis=1)
         imp = p_link.sel(name=f"{ci} grid import")
         exp = p_link.sel(name=f"{ci} grid export")
         target = cfg["target"]
@@ -133,17 +135,17 @@ def add_hourly_matching_constraints(n, snapshots):
             )
 
         curt = f"{ci} curtailment import"
-        if curt in n.links.index:
+        if curt in n.c.links.static.index:
             load_da = load.rename_axis("snapshot").to_xarray()
             m.add_constraints(
                 p_link.sel(name=curt) <= load_da,
                 name=f"hourly_matching_curtailment_load-{ci}",
             )
-            ct = n.buses.at[ci, "country"]
-            gens = n.generators.index[
+            ct = n.c.buses.static.at[ci, "country"]
+            gens = n.c.generators.static.index[
                 (bus_country == ct)
-                & n.generators.carrier.isin(cfg["curtailment_carriers"])
-                & ~n.generators.bus.isin(cfg["nodes"])
+                & n.c.generators.static.carrier.isin(cfg["curtailment_carriers"])
+                & ~n.c.generators.static.bus.isin(cfg["nodes"])
             ]
             p_max_pu = n.get_switchable_as_dense("Generator", "p_max_pu", snapshots)[
                 gens
@@ -156,19 +158,20 @@ def add_hourly_matching_constraints(n, snapshots):
                 lhs -= (xr.DataArray(p_max_pu[ext]) * p_nom_gen.sel(name=ext)).sum(
                     "name"
                 )
-            rhs = (p_max_pu[fix] * n.generators.p_nom[fix]).sum(axis=1)
+            rhs = (p_max_pu[fix] * n.c.generators.static.p_nom[fix]).sum(axis=1)
             rhs.index.name = "snapshot"
             m.add_constraints(
                 lhs <= rhs.to_xarray(), name=f"hourly_matching_curtailment-{ci}"
             )
 
         # shared land potential with grid generators at the same node
-        ci_gens = n.generators.index[
-            (n.generators.bus == ci) & n.generators.index.str.endswith(" CI")
+        ci_gens = n.c.generators.static.index[
+            (n.c.generators.static.bus == ci)
+            & n.c.generators.static.index.str.endswith(" CI")
         ]
         for g in ci_gens:
             parent = g.removesuffix(" CI")
-            p_max = n.generators.at[parent, "p_nom_max"]
+            p_max = n.c.generators.static.at[parent, "p_nom_max"]
             if not np.isfinite(p_max) or parent not in ext_gen:
                 continue
             m.add_constraints(

@@ -242,6 +242,17 @@ def input_custom_extra_functionality(w):
     return []
 
 
+def input_fixed_base_network(w) -> list[str]:
+    """Solved base scenario whose capacities are fixed (industry.hourly_matching.fix_base)."""
+    if not config["run"].get("scenarios", {}).get("enable", False):
+        return []
+    hm = config_provider("industry", "hourly_matching")(w)
+    base = hm.get("base_scenario", "base")
+    if not hm.get("fix_base", False) or w.run == base:
+        return []
+    return RESULTS.format(run=base) + f"networks/solved_{w.horizon}.nc"
+
+
 def input_custom_costs(w) -> list[str]:
     """Return the custom cost files as a list, empty if disabled."""
     fns = config_provider("costs", "custom_cost_fn")(w)

@@ -6713,12 +6713,14 @@ def add_additional_flat_load(
     for ct, p_mw in (loads_mw or {}).items():
         if not p_mw:
             continue
-        buses = n.buses.index[(n.buses.carrier == "AC") & (n.buses.country == ct)]
+        buses = n.c.buses.static.index[
+            (n.c.buses.static.carrier == "AC") & (n.c.buses.static.country == ct)
+        ]
         if buses.empty:
             raise ValueError(f"additional_flat_load: no AC bus found for '{ct}'.")
-        el_loads = n.loads[n.loads.bus.isin(buses)]
+        el_loads = n.c.loads.static[n.c.loads.static.bus.isin(buses)]
         demand = (
-            n.loads_t.p_set.reindex(columns=el_loads.index, fill_value=0.0)
+            n.c.loads.dynamic.p_set.reindex(columns=el_loads.index, fill_value=0.0)
             .mean()
             .add(el_loads.p_set, fill_value=0.0)
             .groupby(el_loads.bus)
@@ -6773,28 +6775,28 @@ def add_additional_flat_load(
         )
 
         # dedicated newly built VRE, copying costs and profiles of the node
-        gens = n.generators.index[
-            (n.generators.bus == node)
-            & n.generators.carrier.isin(matching["carriers"])
-            & n.generators.p_nom_extendable
+        gens = n.c.generators.static.index[
+            (n.c.generators.static.bus == node)
+            & n.c.generators.static.carrier.isin(matching["carriers"])
+            & n.c.generators.static.p_nom_extendable
         ]
         if gens.empty:
             raise ValueError(f"hourly_matching: no extendable VRE found at {node}.")
-        new = n.generators.loc[gens].copy()
+        new = n.c.generators.static.loc[gens].copy()
         new.index = new.index + " CI"
         new["bus"] = ci
         new[["p_nom", "p_nom_min"]] = 0.0
-        new["build_year"] = n.generators.loc[gens, "build_year"].values
+        new["build_year"] = n.c.generators.static.loc[gens, "build_year"].values
         n.add("Generator", new.index, **new)
-        p_max_pu = n.generators_t.p_max_pu.reindex(columns=gens)
+        p_max_pu = n.c.generators.dynamic.p_max_pu.reindex(columns=gens)
         p_max_pu.columns = p_max_pu.columns + " CI"
-        n.generators_t.p_max_pu[p_max_pu.columns] = p_max_pu.fillna(
+        n.c.generators.dynamic.p_max_pu[p_max_pu.columns] = p_max_pu.fillna(
             new["p_max_pu"]
         )
 
         # dedicated newly built storage, copying costs of the node
         def copy(c, names, rename, bus_map):
-            df = n.static(c).loc[names].copy()
+            df = n.c[c].static.loc[names].copy()
             df.index = [rename(i) for i in df.index]
             for col, mapping in bus_map.items():
                 df[col] = df[col].replace(mapping)
@@ -6809,27 +6811,50 @@ def add_additional_flat_load(
             n.add(c, df.index, **df)
 
         if "battery" in matching["storage"]:
-            n.add("Bus", f"{ci} battery", carrier="battery", location=node,
-                  country=ct, unit="MWh")
+            n.add(
+                "Bus",
+                f"{ci} battery",
+                carrier="battery",
+                location=node,
+                country=ct,
+                unit="MWh",
+            )
             m = {node: ci, f"{node} battery": f"{ci} battery"}
-            copy("Store", [f"{node} battery"],
-                 lambda i: i.replace(node, ci), {"bus": m})
+            copy(
+                "Store", [f"{node} battery"], lambda i: i.replace(node, ci), {"bus": m}
+            )
             # charger before discharger keeps add_battery_constraints pairing
-            copy("Link", [f"{node} battery charger", f"{node} battery discharger"],
-                 lambda i: i.replace(node, ci), {"bus0": m, "bus1": m})
+            copy(
+                "Link",
+                [f"{node} battery charger", f"{node} battery discharger"],
+                lambda i: i.replace(node, ci),
+                {"bus0": m, "bus1": m},
+            )
 
         if "H2" in matching["storage"]:
             reconv = [
-                i for i in [f"{node} H2 Fuel Cell", f"{node} H2 turbine"]
-                if i in n.links.index
+                i
+                for i in [f"{node} H2 Fuel Cell", f"{node} H2 turbine"]
+                if i in n.c.links.static.index
             ]
-            n.add("Bus", f"{ci} H2", carrier="H2", location=node, country=ct,
-                  unit="MWh_LHV")
+            n.add(
+                "Bus",
+                f"{ci} H2",
+                carrier="H2",
+                location=node,
+                country=ct,
+                unit="MWh_LHV",
+            )
             m = {node: ci, f"{node} H2": f"{ci} H2"}
-            copy("Store", [f"{node} H2 Store"],
-                 lambda i: i.replace(node, ci), {"bus": m})
-            copy("Link", [f"{node} H2 Electrolysis"] + reconv[:1],
-                 lambda i: i.replace(node, ci), {"bus0": m, "bus1": m})
+            copy(
+                "Store", [f"{node} H2 Store"], lambda i: i.replace(node, ci), {"bus": m}
+            )
+            copy(
+                "Link",
+                [f"{node} H2 Electrolysis"] + reconv[:1],
+                lambda i: i.replace(node, ci),
+                {"bus0": m, "bus1": m},
+            )
 
     if ci_nodes:
         carriers = ["CI grid import", "CI grid export", "CI curtailment import"]

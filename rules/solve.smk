@@ -7,6 +7,7 @@ rule solve_network:
     """Optimises investment and dispatch for one planning horizon to minimise total system cost."""
     input:
         network=resources("networks/composed_{horizon}.nc"),
+        base_network=input_fixed_base_network,
     output:
         network=RESULTS + "networks/solved_{horizon}.nc",
         model=(
