@@ -1634,3 +1634,49 @@ if (CO2_REMOVAL_DATASET := dataset_version("co2_removal_data"))["source"] in [
                     )
                     with z.open(member) as src, open(path, "wb") as dst:
                         dst.write(src.read())
+
+
+if (PEMMDB_DATASET := dataset_version("pemmdb"))["source"] in [
+    "primary",
+    "archive",
+]:
+
+    rule retrieve_pemmdb:
+        """Retrieves and unpacks the ENTSO-E PEMMDB national trends node files.
+
+        The archive holds ``PEMMDB_2.X/<year>/PEMMDB_<node>[_OFF]_NationalTrends_<year>.xlsx``.
+        A single top-level folder (e.g. ``PEMMDB_2.X``) is stripped, so that the
+        year directories are placed directly in the dataset folder.
+        """
+        input:
+            zip_file=storage(PEMMDB_DATASET["url"]),
+        output:
+            directory(PEMMDB_DATASET["folder"]),
+        log:
+            "logs/retrieve_pemmdb.log",
+        retries: 2
+        run:
+            from shutil import copyfileobj
+
+            out = Path(output[0]).resolve()
+            with ZipFile(input.zip_file) as z:
+                members = [
+                    m
+                    for m in z.infolist()
+                    if not m.is_dir()
+                    and not m.filename.startswith("__MACOSX/")
+                    and not Path(m.filename).name.startswith(".")
+                ]
+                parts = [Path(m.filename).parts for m in members]
+                # strip a single top-level folder common to all files
+                strip = int(
+                    all(len(p) > 1 for p in parts)
+                    and len({p[0] for p in parts}) == 1
+                )
+                for m, p in zip(members, parts):
+                    target = out.joinpath(*p[strip:]).resolve()
+                    if not target.is_relative_to(out):
+                        raise ValueError(f"Unsafe path in archive: {m.filename}")
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with z.open(m) as src, open(target, "wb") as dst:
+                        copyfileobj(src, dst)

@@ -197,6 +197,10 @@ class DataConfig(BaseModel):
         default_factory=_DataSourceConfig,
         description="GEM Global Cement and Concrete Tracker data source configuration.",
     )
+    pemmdb: _DataSourceConfig = Field(
+        default_factory=lambda: _DataSourceConfig(source="primary"),
+        description="ENTSO-E PEMMDB (Pan-European Market Modelling Database) national trends data source configuration.",
+    )
     instrat_co2_prices: _DataSourceConfig = Field(
         default_factory=lambda: _DataSourceConfig(source="primary"),
         description="Instrat CO2 prices data source configuration.",

@@ -9,7 +9,7 @@
 run:
   name: all  # runs every scenario in config/scenarios.yaml
   scenarios:
-    enable: true
+    enable: false
     file: config/scenarios_some.yaml
     # file: config/scenarios_all.yaml
   disable_progressbar: true
@@ -39,7 +39,7 @@ clustering:
   - ["AL", "BG", "GR", "RO"]
   - ["SE", "NO"]
   temporal:
-    averaging: 6h # for testing
+    averaging: 3h # for testing
   simplify_network:
     remove_stubs: false
     remove_stubs_across_borders: false
@@ -48,9 +48,57 @@ solving:
   options:
     io_api: direct
     custom_extra_functionality: ../scripts/custom_extra_functionality.py
+    # dispatch only: capacities are given, nothing is optimised
+    fixed_capacities:
+      enable: true
+      pemmdb:
+        enable: true
+        path:                          # unset: retrieve data.pemmdb; or custom dir with PEMMDB_<node>_NationalTrends_<year>.xlsx
+        year_map: {}                   # e.g. {2025: 2030}; no PEMMDB data for 2025
+      file:   # optional overrides (component,name,capacity), applied after PEMMDB
+    load_shedding:
+      enable: true            # ensures feasibility with given capacities
+      default_cost: 100000    # EUR/MWh (bus carrier unit)
+      all_carriers: true
+    load_sinks:
+      enable: true            # absorbs surplus (e.g. process emissions, biomass) when outlets have no capacity
+      default_cost: 100000
+      all_carriers: true
+    rolling_horizon: true
+    horizon: 56   # snapshots per window: 7*24 h / temporal.averaging (3h)
+    overlap: 0
+  operations:
+    rolling_horizon: true
+    horizon: 56   # 7*24 h / temporal.averaging (3h)
   solver:
     name: "gurobi"             # default solver is gurobi, could be "highs"
     options: "gurobi-default"  # ... and "highs-default"
+
+# power plant grouping: one link per node and fuel, matching the PEMMDB thermal categories
+sector:
+  conventional_generation:
+    OCGT: gas
+    CCGT: gas
+    coal: coal
+    lignite: lignite
+    oil: oil
+  # one link per PEMMDB plant class: <node> <generator> <class>, net efficiency (LHV)
+  # standard values of the ENTSO-E (TYNDP/ERAA) common data; verify against your dataset
+  conventional_generation_classes:
+    coal: {old 1: 0.35, old 2: 0.40, new: 0.46, CCS: 0.38}
+    lignite: {old 1: 0.35, old 2: 0.40, new: 0.46, CCS: 0.38}
+    CCGT:
+      conventional old 1: 0.36
+      conventional old 2: 0.41
+      old 1: 0.40
+      old 2: 0.48
+      present 1: 0.56
+      present 2: 0.58
+      new: 0.60
+      CCS: 0.51
+    OCGT: {old: 0.35, new: 0.42}
+    oil: {light: 0.35, heavy old 1: 0.35, heavy old 2: 0.40, shale old: 0.29, shale new: 0.39}
+  conventional_generation_ccs_capture_rate: 0.9
 
 # hourly matching of the additional 100 MW load; enabled per scenario via target > 0 (config/scenarios.yaml)
 industry:

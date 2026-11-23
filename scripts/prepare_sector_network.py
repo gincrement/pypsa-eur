@@ -1509,22 +1509,44 @@ def add_generation(
             cf_industry=cf_industry,
         )
 
-        n.add(
-            "Link",
-            nodes + " " + generator,
-            bus0=carrier_nodes,
-            bus1=nodes,
-            bus2="co2 atmosphere",
-            marginal_cost=costs.at[generator, "efficiency"]
-            * costs.at[generator, "VOM"],  # NB: VOM is per MWel
-            capital_cost=costs.at[generator, "efficiency"]
-            * costs.at[generator, "capital_cost"],  # NB: fixed cost is per MWel
-            p_nom_extendable=True,
-            carrier=generator,
-            efficiency=costs.at[generator, "efficiency"],
-            efficiency2=costs.at[carrier, "CO2 intensity"],
-            lifetime=costs.at[generator, "lifetime"],
-        )
+        # optional split into plant classes (e.g. PEMMDB "old 1", "new", "CCS"),
+        # each with its own efficiency; otherwise one link per node
+        classes = options.get("conventional_generation_classes", {}).get(generator)
+        if not classes:
+            classes = {"": costs.at[generator, "efficiency"]}
+
+        intensity = costs.at[carrier, "CO2 intensity"]
+        capture = options.get("conventional_generation_ccs_capture_rate", 0.9)
+        co2_nodes = pd.Index(spatial.co2.nodes)
+        if len(co2_nodes) != len(nodes):
+            co2_nodes = pd.Index([co2_nodes[0]] * len(nodes))
+
+        for name, efficiency in classes.items():
+            suffix = f" {generator} {name}".rstrip()
+            ccs = "CCS" in name
+            kwargs = {}
+            if ccs:
+                kwargs = dict(
+                    bus3=co2_nodes,
+                    efficiency3=intensity * capture,
+                )
+            n.add(
+                "Link",
+                nodes + suffix,
+                bus0=carrier_nodes,
+                bus1=nodes,
+                bus2="co2 atmosphere",
+                marginal_cost=efficiency
+                * costs.at[generator, "VOM"],  # NB: VOM is per MWel
+                capital_cost=efficiency
+                * costs.at[generator, "capital_cost"],  # NB: fixed cost is per MWel
+                p_nom_extendable=True,
+                carrier=generator,
+                efficiency=efficiency,
+                efficiency2=intensity * (1 - capture) if ccs else intensity,
+                lifetime=costs.at[generator, "lifetime"],
+                **kwargs,
+            )
 
 
 def add_ammonia(

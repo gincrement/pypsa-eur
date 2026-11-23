@@ -242,6 +242,43 @@ def input_custom_extra_functionality(w):
     return []
 
 
+def input_fixed_capacities(w) -> list[str]:
+    """Capacity files (solving.options.fixed_capacities): PEMMDB first, custom file last."""
+    cfg = config_provider("solving", "options", "fixed_capacities", default={})(w)
+    if not cfg.get("enable", False):
+        return []
+    fns = []
+    if cfg.get("pemmdb", {}).get("enable", False):
+        # resolve the wildcard pattern first, so the path matches the rule output
+        fns.append(resources("fixed_capacities_pemmdb_{horizon}.csv").format(**w))
+    if cfg.get("file"):
+        fns.append(cfg["file"].format(horizon=w.horizon))
+    return fns
+
+
+def pemmdb_path(w) -> str:
+    """PEMMDB directory or CSV of the horizon (solving.options.fixed_capacities.pemmdb).
+
+    Without a custom `path`, the `<year>` directory of the retrieved dataset
+    `data.pemmdb` (rule `retrieve_pemmdb`) is used.
+    """
+    cfg = config_provider("solving", "options", "fixed_capacities", "pemmdb")(w)
+    year_map = {int(k): v for k, v in (cfg.get("year_map") or {}).items()}
+    year = year_map.get(int(w.horizon), int(w.horizon))
+    path = cfg.get("path") or f"{dataset_version('pemmdb')['folder']}/{{year}}"
+    return path.format(year=year, horizon=w.horizon)
+
+
+def input_pemmdb(w) -> str:
+    """Input of rule build_pemmdb_capacities: the custom PEMMDB path, or the
+    folder of the retrieved dataset (a directory output, so that the download
+    is triggered; the year subdirectory is passed as param `pemmdb_path`)."""
+    cfg = config_provider("solving", "options", "fixed_capacities", "pemmdb")(w)
+    if cfg.get("path"):
+        return pemmdb_path(w)
+    return dataset_version("pemmdb")["folder"]
+
+
 def input_fixed_base_network(w) -> list[str]:
     """Solved base scenario whose capacities are fixed (industry.hourly_matching.fix_base)."""
     if not config["run"].get("scenarios", {}).get("enable", False):

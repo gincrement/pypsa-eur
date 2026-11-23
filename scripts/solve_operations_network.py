@@ -23,6 +23,7 @@ from scripts.solve_network import (
     collect_kwargs,
     create_optimization_model,
     extra_functionality,
+    optimize_with_rolling_horizon,
     prepare_network,
 )
 
@@ -89,7 +90,7 @@ if __name__ == "__main__":
                 planning_horizons=planning_horizons,
                 snakemake=snakemake,
             )
-            n.optimize.optimize_with_rolling_horizon(**all_kwargs)
+            optimize_with_rolling_horizon(n, **all_kwargs)
         else:
             logger.info("Solving operations network...")
             model_kwargs, solve_kwargs = collect_kwargs(

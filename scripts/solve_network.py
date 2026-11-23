@@ -226,11 +226,23 @@ def get_glc_sense(glc: pd.Series) -> str:
     return sense
 
 
-def emission_stores(n: pypsa.Network, emissions: pd.Index) -> pd.DataFrame:
-    """Return the non-cyclic stores that accumulate emissions on their bus."""
+def emission_stores(
+    n: pypsa.Network, emissions: pd.Index, allow_initial: bool = False
+) -> pd.DataFrame:
+    """
+    Return the non-cyclic stores that accumulate emissions on their bus.
+
+    With ``allow_initial`` a non-zero ``e_initial`` is accepted. This is the
+    case in rolling horizon optimisation, where ``prepare_network`` resets
+    ``e_initial`` to zero and PyPSA then carries the level of the previous
+    window over, so the store level remains cumulative emissions since the
+    start of the horizon.
+    """
     bus_carrier = n.stores.bus.map(n.buses.carrier)
     stores = n.stores[bus_carrier.isin(emissions) & ~n.stores.e_cyclic]
-    seeded = stores.index[stores.e_initial.ne(0) | stores.e_initial_per_period]
+    seeded = stores.index[
+        (stores.e_initial.ne(0) & ~allow_initial) | stores.e_initial_per_period
+    ]
     if not seeded.empty:
         raise ValueError(
             f"Emission stores {list(seeded)} start from a non-zero level "
@@ -533,6 +545,83 @@ def fix_to_base(n: pypsa.Network, base: pypsa.Network, matching: dict) -> None:
         if not n.c[c].static.empty
     }
     logger.info(f"Fixed capacities to the base scenario; extendable: {ext}")
+
+
+def optimize_with_rolling_horizon(n: pypsa.Network, **kwargs: Any) -> None:
+    """
+    Rolling horizon optimisation reusing one solver environment.
+
+    Each window builds a new model; with Gurobi a shared ``Env`` avoids
+    opening one environment per window, which fails with single-use
+    licenses (e.g. WLS) from the second window on.
+    """
+    if kwargs.get("solver_name") == "gurobi" and "env" not in kwargs:
+        import gurobipy
+
+        with gurobipy.Env() as env:
+            n.optimize.optimize_with_rolling_horizon(env=env, **kwargs)
+    else:
+        n.optimize.optimize_with_rolling_horizon(**kwargs)
+
+
+def fix_capacities(n: pypsa.Network, fns: str | list[str] | None = None) -> None:
+    """
+    Fix all capacities for a dispatch-only optimisation.
+
+    Capacities listed in the files ``fns`` (columns ``component``, ``name``,
+    ``capacity``, optional ``max_hours`` for storage units) overwrite
+    ``p_nom``/``s_nom``/``e_nom``; later files take precedence. Afterwards
+    every component is set non-extendable, so the remaining components keep
+    the capacity they have in the network.
+    """
+    attrs = {
+        "Generator": "p_nom",
+        "StorageUnit": "p_nom",
+        "Link": "p_nom",
+        "Line": "s_nom",
+        "Store": "e_nom",
+    }
+
+    if isinstance(fns, str):
+        fns = [fns]
+    for fn in fns or []:
+        df = pd.read_csv(fn, comment="#")
+        missing = {"component", "name", "capacity"}.difference(df.columns)
+        if missing:
+            raise ValueError(f"Custom capacity file {fn} lacks columns {missing}.")
+        unknown = set(df.component).difference(attrs)
+        if unknown:
+            raise ValueError(f"Unknown components {unknown} in {fn}.")
+        for c, group in df.groupby("component"):
+            static = n.c[c].static
+            caps = group.set_index("name")["capacity"].astype(float)
+            absent = caps.index.difference(static.index)
+            if not absent.empty:
+                logger.warning(
+                    f"{len(absent)} {c} in {fn} not in network, ignored: {list(absent)}"
+                )
+            caps = caps.drop(absent)
+            static.loc[caps.index, attrs[c]] = caps
+            if c == "StorageUnit" and "max_hours" in group:
+                mh = group.set_index("name")["max_hours"].drop(absent).dropna()
+                static.loc[mh.index, "max_hours"] = mh.astype(float)
+            logger.info(f"Set capacity of {len(caps)} {c} from {fn}.")
+
+    for c, nom in attrs.items():
+        static = n.c[c].static
+        if static.empty:
+            continue
+        ext = static.index[static[f"{nom}_extendable"]]
+        static.loc[ext, f"{nom}_opt"] = static.loc[ext, nom]
+        static[f"{nom}_extendable"] = False
+
+    # transmission expansion limits are void with fixed lines and links
+    glc = n.c.global_constraints.static
+    tx = glc.index[glc.type.str.startswith("transmission_")]
+    if not tx.empty:
+        n.remove("GlobalConstraint", tx)
+
+    logger.info("Fixed all capacities: dispatch-only optimisation.")
 
 
 def prepare_network(
@@ -1304,7 +1393,8 @@ def add_co2_atmosphere_constraint(
         if emissions.empty:
             continue
 
-        stores = emission_stores(n, emissions.index)
+        rolling_horizon = n.config["solving"]["options"].get("rolling_horizon", False)
+        stores = emission_stores(n, emissions.index, allow_initial=rolling_horizon)
         if not stores.empty:
             last_i = snapshots[-1]
             lhs = n.model["Store-e"].loc[last_i, stores.index]
@@ -1600,6 +1690,11 @@ if __name__ == "__main__":
             snakemake.config["industry"]["hourly_matching"],
         )
 
+    if cf_solving["fixed_capacities"]["enable"]:
+        # PEMMDB capacities first, custom capacity file last (takes precedence)
+        fns = snakemake.input.get("fixed_capacities") or []
+        fix_capacities(n, [fns] if isinstance(fns, str) else list(fns))
+
     # Prepare network (settings before solving)
     prepare_network(
         n,
@@ -1645,7 +1740,7 @@ if __name__ == "__main__":
                 planning_horizons=planning_horizons,
                 snakemake=snakemake,
             )
-            n.optimize.optimize_with_rolling_horizon(**all_kwargs)
+            optimize_with_rolling_horizon(n, **all_kwargs)
             status, condition = "", ""
 
         elif skip_iterations:

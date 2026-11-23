@@ -113,8 +113,88 @@ class _LoadSinksConfig(ConfigModel):
         return self
 
 
+class _PemmdbConfig(ConfigModel):
+    """Configuration for `solving.options.fixed_capacities.pemmdb` settings."""
+
+    enable: bool = Field(
+        False,
+        description="Derive fixed capacities from PEMMDB (Pan-European Market Modelling Database) in rule `build_pemmdb_capacities`. Applied before the custom `file`, which can override single components.",
+    )
+    path: str | None = Field(
+        None,
+        description="PEMMDB data: a directory with the ENTSO-E node files `PEMMDB_<node>[_OFF]_NationalTrends_<year>.xlsx`, or a CSV with columns `node`, `technology`, `capacity` (MW) and optional `energy` (MWh). `{year}` is replaced by the PEMMDB year of the planning horizon (see `year_map`). If not set, the dataset `data.pemmdb` is retrieved (rule `retrieve_pemmdb`) and its `<year>` directory is used.",
+    )
+    year_map: dict[int, int] = Field(
+        default_factory=dict,
+        description="Planning horizon to PEMMDB year, e.g. `{2025: 2030}` if no PEMMDB data exists for a horizon. Unlisted horizons use their own year.",
+    )
+    node_map: dict[str, list[str]] = Field(
+        default_factory=lambda: {
+            "UK00": ["GB", "GB00"],
+            "UKNI": ["GBI", "GBNI"],
+        },
+        description="PEMMDB node to region codes of the network (AC bus name without the `AC` suffix, e.g. `DE` at `clustering.administrative.level: 0`, `DE00` or `ITCN` at level `bz`). Regions not in the network are skipped. Nodes without an existing mapped region are matched to the region of the same name (bidding zones) and otherwise to all regions of their country (first two letters, UK -> GB), e.g. offshore nodes such as `DEKF`.",
+    )
+    technology_map: dict[str, list[str]] = Field(
+        default_factory=lambda: {
+            "^nuclear": ["nuclear"],
+            "^hard coal - (.+)$": ["coal \\1"],
+            "^lignite - (.+)$": ["lignite \\1"],
+            "^gas - conventional (.+)$": ["CCGT conventional \\1"],
+            "^gas - ccgt (.+)$": ["CCGT \\1"],
+            "^gas - ocgt (.+)$": ["OCGT \\1"],
+            "^light oil": ["oil light"],
+            "^heavy oil - (.+)$": ["oil heavy \\1"],
+            "^oil shale - (.+)$": ["oil shale \\1"],
+            "^hydrogen - (ccgt|ocgt)": ["H2 turbine"],
+            "^hydrogen - fuel cell": ["H2 Fuel Cell"],
+            "run of river|pondage": ["ror"],
+            "reservoir": ["hydro"],
+            "pump storage": ["PHS"],
+            "^wind onshore": ["onwind"],
+            "^wind offshore": ["offwind-ac", "offwind-dc", "offwind-float"],
+            "^solar pv rooftop": ["solar rooftop"],
+            "^solar pv$": ["solar", "solar-hsat"],
+            "^battery utility": ["battery"],
+            "^battery residential": ["home battery"],
+            "^electrolyser": ["H2 Electrolysis"],
+            "biomass": ["urban central solid biomass CHP"],
+            "geothermal": ["geothermal"],
+            "marine|waste|not defined|other non-res|dsr|solar thermal": [],
+        },
+        description="Regular expression (case-insensitive, first match wins) on the PEMMDB technology to network targets; `\\1` inserts the first group, e.g. the plant class. A target matches components named `<bus> <target>` (e.g. `DEAC coal old 1`, see `sector.conventional_generation_classes`) or with carrier `<target>`; if none exists, the carrier of its first word (e.g. `coal`) is used. Thermal technologies read from the files are named `<fuel> - <type>`, e.g. `Hard coal - old 1`, `Gas - CCGT present 2`. Capacity is split over matching components by their composed capacity, otherwise `p_nom_max`, otherwise equally. An empty list ignores the technology.",
+    )
+    zero_missing: bool = Field(
+        True,
+        description="Set components of mapped carriers to zero in countries covered by the PEMMDB file if PEMMDB has no value for them.",
+    )
+
+
+class _FixedCapacitiesConfig(ConfigModel):
+    """Configuration for `solving.options.fixed_capacities` settings."""
+
+    pemmdb: _PemmdbConfig = Field(
+        default_factory=_PemmdbConfig,
+        description="Fixed capacities from PEMMDB.",
+    )
+
+    enable: bool = Field(
+        False,
+        description="Dispatch only: set all components non-extendable before rule `solve_network`, so no capacities are optimised. Capacities listed in `file` overwrite `p_nom`/`s_nom`/`e_nom`; all other components keep the capacity they have in the composed network. Combine with `rolling_horizon: true` and `load_shedding.enable: true`.",
+    )
+    file: str | None = Field(
+        None,
+        description="Optional CSV with columns `component` (Generator, Link, Line, Store, StorageUnit), `name` (component name in the network) and `capacity` (MW or MWh for stores). The placeholder `{horizon}` is replaced by the planning horizon. Scenario-specific files can be set via `run.scenarios`.",
+    )
+
+
 class _SolvingOptionsConfig(BaseModel):
     """Configuration for `solving.options` settings."""
+
+    fixed_capacities: _FixedCapacitiesConfig = Field(
+        default_factory=_FixedCapacitiesConfig,
+        description="Fix all capacities (dispatch only), optionally from a custom capacity file.",
+    )
 
     clip_p_max_pu: float = Field(
         0.01,

@@ -1183,6 +1183,26 @@
             }
           }
         },
+        "pemmdb": {
+          "description": "Configuration for a single data source.",
+          "properties": {
+            "source": {
+              "default": "archive",
+              "description": "Source of the data. 'archive' retrieves pre-built data, 'primary' retrieves from primary source.",
+              "enum": [
+                "archive",
+                "primary",
+                "build"
+              ],
+              "type": "string"
+            },
+            "version": {
+              "default": "latest",
+              "description": "Version of the data to use. Uses the specific 'version' for the selected 'source' or the dataset tagged 'latest' for this source.",
+              "type": "string"
+            }
+          }
+        },
         "instrat_co2_prices": {
           "description": "Configuration for a single data source.",
           "properties": {
@@ -6137,6 +6157,21 @@
           ],
           "description": "Add a more detailed description of conventional carriers. Any power generation requires the consumption of fuel from nodes representing that fuel."
         },
+        "conventional_generation_classes": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object"
+          },
+          "description": "Split conventional generators into plant classes with individual efficiencies, e.g. `coal: {old 1: 0.35, old 2: 0.40, new: 0.46, CCS: 0.38}` adds the links `<node> coal old 1`, ... instead of `<node> coal`. Keys must be generators in `conventional_generation`. Classes containing `CCS` capture `conventional_generation_ccs_capture_rate` of the CO2 to the `co2 stored` bus.",
+          "type": "object"
+        },
+        "conventional_generation_ccs_capture_rate": {
+          "default": 0.9,
+          "description": "Share of CO2 captured by conventional generator classes containing `CCS`.",
+          "type": "number"
+        },
         "industry_heat": {
           "description": "Configuration for `sector.industry_heat` settings.",
           "properties": {
@@ -6419,6 +6454,82 @@
         "options": {
           "description": "Configuration for `solving.options` settings.",
           "properties": {
+            "fixed_capacities": {
+              "description": "Configuration for `solving.options.fixed_capacities` settings.",
+              "properties": {
+                "pemmdb": {
+                  "description": "Configuration for `solving.options.fixed_capacities.pemmdb` settings.",
+                  "properties": {
+                    "enable": {
+                      "default": false,
+                      "description": "Derive fixed capacities from PEMMDB (Pan-European Market Modelling Database) in rule `build_pemmdb_capacities`. Applied before the custom `file`, which can override single components.",
+                      "type": "boolean"
+                    },
+                    "path": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "PEMMDB data: a directory with the ENTSO-E node files `PEMMDB_<node>[_OFF]_NationalTrends_<year>.xlsx`, or a CSV with columns `node`, `technology`, `capacity` (MW) and optional `energy` (MWh). `{year}` is replaced by the PEMMDB year of the planning horizon (see `year_map`). If not set, the dataset `data.pemmdb` is retrieved (rule `retrieve_pemmdb`) and its `<year>` directory is used."
+                    },
+                    "year_map": {
+                      "additionalProperties": {
+                        "type": "integer"
+                      },
+                      "description": "Planning horizon to PEMMDB year, e.g. `{2025: 2030}` if no PEMMDB data exists for a horizon. Unlisted horizons use their own year.",
+                      "type": "object"
+                    },
+                    "node_map": {
+                      "additionalProperties": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "description": "PEMMDB node to region codes of the network (AC bus name without the `AC` suffix, e.g. `DE` at `clustering.administrative.level: 0`, `DE00` or `ITCN` at level `bz`). Regions not in the network are skipped. Nodes without an existing mapped region are matched to the region of the same name (bidding zones) and otherwise to all regions of their country (first two letters, UK -> GB), e.g. offshore nodes such as `DEKF`.",
+                      "type": "object"
+                    },
+                    "technology_map": {
+                      "additionalProperties": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "description": "Regular expression (case-insensitive, first match wins) on the PEMMDB technology to network targets; `\\1` inserts the first group, e.g. the plant class. A target matches components named `<bus> <target>` (e.g. `DEAC coal old 1`, see `sector.conventional_generation_classes`) or with carrier `<target>`; if none exists, the carrier of its first word (e.g. `coal`) is used. Thermal technologies read from the files are named `<fuel> - <type>`, e.g. `Hard coal - old 1`, `Gas - CCGT present 2`. Capacity is split over matching components by their composed capacity, otherwise `p_nom_max`, otherwise equally. An empty list ignores the technology.",
+                      "type": "object"
+                    },
+                    "zero_missing": {
+                      "default": true,
+                      "description": "Set components of mapped carriers to zero in countries covered by the PEMMDB file if PEMMDB has no value for them.",
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "enable": {
+                  "default": false,
+                  "description": "Dispatch only: set all components non-extendable before rule `solve_network`, so no capacities are optimised. Capacities listed in `file` overwrite `p_nom`/`s_nom`/`e_nom`; all other components keep the capacity they have in the composed network. Combine with `rolling_horizon: true` and `load_shedding.enable: true`.",
+                  "type": "boolean"
+                },
+                "file": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Optional CSV with columns `component` (Generator, Link, Line, Store, StorageUnit), `name` (component name in the network) and `capacity` (MW or MWh for stores). The placeholder `{horizon}` is replaced by the planning horizon. Scenario-specific files can be set via `run.scenarios`."
+                }
+              }
+            },
             "clip_p_max_pu": {
               "default": 0.01,
               "description": "To avoid too small values in the renewables` per-unit availability time series values below this threshold are set to zero.",
@@ -8527,6 +8638,82 @@
         }
       }
     },
+    "_FixedCapacitiesConfig": {
+      "description": "Configuration for `solving.options.fixed_capacities` settings.",
+      "properties": {
+        "pemmdb": {
+          "description": "Configuration for `solving.options.fixed_capacities.pemmdb` settings.",
+          "properties": {
+            "enable": {
+              "default": false,
+              "description": "Derive fixed capacities from PEMMDB (Pan-European Market Modelling Database) in rule `build_pemmdb_capacities`. Applied before the custom `file`, which can override single components.",
+              "type": "boolean"
+            },
+            "path": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "PEMMDB data: a directory with the ENTSO-E node files `PEMMDB_<node>[_OFF]_NationalTrends_<year>.xlsx`, or a CSV with columns `node`, `technology`, `capacity` (MW) and optional `energy` (MWh). `{year}` is replaced by the PEMMDB year of the planning horizon (see `year_map`). If not set, the dataset `data.pemmdb` is retrieved (rule `retrieve_pemmdb`) and its `<year>` directory is used."
+            },
+            "year_map": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "description": "Planning horizon to PEMMDB year, e.g. `{2025: 2030}` if no PEMMDB data exists for a horizon. Unlisted horizons use their own year.",
+              "type": "object"
+            },
+            "node_map": {
+              "additionalProperties": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "description": "PEMMDB node to region codes of the network (AC bus name without the `AC` suffix, e.g. `DE` at `clustering.administrative.level: 0`, `DE00` or `ITCN` at level `bz`). Regions not in the network are skipped. Nodes without an existing mapped region are matched to the region of the same name (bidding zones) and otherwise to all regions of their country (first two letters, UK -> GB), e.g. offshore nodes such as `DEKF`.",
+              "type": "object"
+            },
+            "technology_map": {
+              "additionalProperties": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "description": "Regular expression (case-insensitive, first match wins) on the PEMMDB technology to network targets; `\\1` inserts the first group, e.g. the plant class. A target matches components named `<bus> <target>` (e.g. `DEAC coal old 1`, see `sector.conventional_generation_classes`) or with carrier `<target>`; if none exists, the carrier of its first word (e.g. `coal`) is used. Thermal technologies read from the files are named `<fuel> - <type>`, e.g. `Hard coal - old 1`, `Gas - CCGT present 2`. Capacity is split over matching components by their composed capacity, otherwise `p_nom_max`, otherwise equally. An empty list ignores the technology.",
+              "type": "object"
+            },
+            "zero_missing": {
+              "default": true,
+              "description": "Set components of mapped carriers to zero in countries covered by the PEMMDB file if PEMMDB has no value for them.",
+              "type": "boolean"
+            }
+          }
+        },
+        "enable": {
+          "default": false,
+          "description": "Dispatch only: set all components non-extendable before rule `solve_network`, so no capacities are optimised. Capacities listed in `file` overwrite `p_nom`/`s_nom`/`e_nom`; all other components keep the capacity they have in the composed network. Combine with `rolling_horizon: true` and `load_shedding.enable: true`.",
+          "type": "boolean"
+        },
+        "file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional CSV with columns `component` (Generator, Link, Line, Store, StorageUnit), `name` (component name in the network) and `capacity` (MW or MWh for stores). The placeholder `{horizon}` is replaced by the planning horizon. Scenario-specific files can be set via `run.scenarios`."
+        }
+      }
+    },
     "_HeatSourceMapConfig": {
       "description": "Configuration for `plotting.heat_source_map` settings.",
       "properties": {
@@ -9496,6 +9683,60 @@
         }
       }
     },
+    "_PemmdbConfig": {
+      "description": "Configuration for `solving.options.fixed_capacities.pemmdb` settings.",
+      "properties": {
+        "enable": {
+          "default": false,
+          "description": "Derive fixed capacities from PEMMDB (Pan-European Market Modelling Database) in rule `build_pemmdb_capacities`. Applied before the custom `file`, which can override single components.",
+          "type": "boolean"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "PEMMDB data: a directory with the ENTSO-E node files `PEMMDB_<node>[_OFF]_NationalTrends_<year>.xlsx`, or a CSV with columns `node`, `technology`, `capacity` (MW) and optional `energy` (MWh). `{year}` is replaced by the PEMMDB year of the planning horizon (see `year_map`). If not set, the dataset `data.pemmdb` is retrieved (rule `retrieve_pemmdb`) and its `<year>` directory is used."
+        },
+        "year_map": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "description": "Planning horizon to PEMMDB year, e.g. `{2025: 2030}` if no PEMMDB data exists for a horizon. Unlisted horizons use their own year.",
+          "type": "object"
+        },
+        "node_map": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "PEMMDB node to region codes of the network (AC bus name without the `AC` suffix, e.g. `DE` at `clustering.administrative.level: 0`, `DE00` or `ITCN` at level `bz`). Regions not in the network are skipped. Nodes without an existing mapped region are matched to the region of the same name (bidding zones) and otherwise to all regions of their country (first two letters, UK -> GB), e.g. offshore nodes such as `DEKF`.",
+          "type": "object"
+        },
+        "technology_map": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "Regular expression (case-insensitive, first match wins) on the PEMMDB technology to network targets; `\\1` inserts the first group, e.g. the plant class. A target matches components named `<bus> <target>` (e.g. `DEAC coal old 1`, see `sector.conventional_generation_classes`) or with carrier `<target>`; if none exists, the carrier of its first word (e.g. `coal`) is used. Thermal technologies read from the files are named `<fuel> - <type>`, e.g. `Hard coal - old 1`, `Gas - CCGT present 2`. Capacity is split over matching components by their composed capacity, otherwise `p_nom_max`, otherwise equally. An empty list ignores the technology.",
+          "type": "object"
+        },
+        "zero_missing": {
+          "default": true,
+          "description": "Set components of mapped carriers to zero in countries covered by the PEMMDB file if PEMMDB has no value for them.",
+          "type": "boolean"
+        }
+      }
+    },
     "_PerennialsConfig": {
       "description": "Configuration for `sector.perennials` settings.",
       "properties": {
@@ -10096,6 +10337,82 @@
     "_SolvingOptionsConfig": {
       "description": "Configuration for `solving.options` settings.",
       "properties": {
+        "fixed_capacities": {
+          "description": "Configuration for `solving.options.fixed_capacities` settings.",
+          "properties": {
+            "pemmdb": {
+              "description": "Configuration for `solving.options.fixed_capacities.pemmdb` settings.",
+              "properties": {
+                "enable": {
+                  "default": false,
+                  "description": "Derive fixed capacities from PEMMDB (Pan-European Market Modelling Database) in rule `build_pemmdb_capacities`. Applied before the custom `file`, which can override single components.",
+                  "type": "boolean"
+                },
+                "path": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "PEMMDB data: a directory with the ENTSO-E node files `PEMMDB_<node>[_OFF]_NationalTrends_<year>.xlsx`, or a CSV with columns `node`, `technology`, `capacity` (MW) and optional `energy` (MWh). `{year}` is replaced by the PEMMDB year of the planning horizon (see `year_map`). If not set, the dataset `data.pemmdb` is retrieved (rule `retrieve_pemmdb`) and its `<year>` directory is used."
+                },
+                "year_map": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "description": "Planning horizon to PEMMDB year, e.g. `{2025: 2030}` if no PEMMDB data exists for a horizon. Unlisted horizons use their own year.",
+                  "type": "object"
+                },
+                "node_map": {
+                  "additionalProperties": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "description": "PEMMDB node to region codes of the network (AC bus name without the `AC` suffix, e.g. `DE` at `clustering.administrative.level: 0`, `DE00` or `ITCN` at level `bz`). Regions not in the network are skipped. Nodes without an existing mapped region are matched to the region of the same name (bidding zones) and otherwise to all regions of their country (first two letters, UK -> GB), e.g. offshore nodes such as `DEKF`.",
+                  "type": "object"
+                },
+                "technology_map": {
+                  "additionalProperties": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "description": "Regular expression (case-insensitive, first match wins) on the PEMMDB technology to network targets; `\\1` inserts the first group, e.g. the plant class. A target matches components named `<bus> <target>` (e.g. `DEAC coal old 1`, see `sector.conventional_generation_classes`) or with carrier `<target>`; if none exists, the carrier of its first word (e.g. `coal`) is used. Thermal technologies read from the files are named `<fuel> - <type>`, e.g. `Hard coal - old 1`, `Gas - CCGT present 2`. Capacity is split over matching components by their composed capacity, otherwise `p_nom_max`, otherwise equally. An empty list ignores the technology.",
+                  "type": "object"
+                },
+                "zero_missing": {
+                  "default": true,
+                  "description": "Set components of mapped carriers to zero in countries covered by the PEMMDB file if PEMMDB has no value for them.",
+                  "type": "boolean"
+                }
+              }
+            },
+            "enable": {
+              "default": false,
+              "description": "Dispatch only: set all components non-extendable before rule `solve_network`, so no capacities are optimised. Capacities listed in `file` overwrite `p_nom`/`s_nom`/`e_nom`; all other components keep the capacity they have in the composed network. Combine with `rolling_horizon: true` and `load_shedding.enable: true`.",
+              "type": "boolean"
+            },
+            "file": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Optional CSV with columns `component` (Generator, Link, Line, Store, StorageUnit), `name` (component name in the network) and `capacity` (MW or MWh for stores). The placeholder `{horizon}` is replaced by the planning horizon. Scenario-specific files can be set via `run.scenarios`."
+            }
+          }
+        },
         "clip_p_max_pu": {
           "default": 0.01,
           "description": "To avoid too small values in the renewables` per-unit availability time series values below this threshold are set to zero.",
@@ -14198,6 +14515,21 @@
           ],
           "description": "Add a more detailed description of conventional carriers. Any power generation requires the consumption of fuel from nodes representing that fuel."
         },
+        "conventional_generation_classes": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object"
+          },
+          "description": "Split conventional generators into plant classes with individual efficiencies, e.g. `coal: {old 1: 0.35, old 2: 0.40, new: 0.46, CCS: 0.38}` adds the links `<node> coal old 1`, ... instead of `<node> coal`. Keys must be generators in `conventional_generation`. Classes containing `CCS` capture `conventional_generation_ccs_capture_rate` of the CO2 to the `co2 stored` bus.",
+          "type": "object"
+        },
+        "conventional_generation_ccs_capture_rate": {
+          "default": 0.9,
+          "description": "Share of CO2 captured by conventional generator classes containing `CCS`.",
+          "type": "number"
+        },
         "industry_heat": {
           "description": "Configuration for `sector.industry_heat` settings.",
           "properties": {
@@ -15262,6 +15594,82 @@
         "options": {
           "description": "Configuration for `solving.options` settings.",
           "properties": {
+            "fixed_capacities": {
+              "description": "Configuration for `solving.options.fixed_capacities` settings.",
+              "properties": {
+                "pemmdb": {
+                  "description": "Configuration for `solving.options.fixed_capacities.pemmdb` settings.",
+                  "properties": {
+                    "enable": {
+                      "default": false,
+                      "description": "Derive fixed capacities from PEMMDB (Pan-European Market Modelling Database) in rule `build_pemmdb_capacities`. Applied before the custom `file`, which can override single components.",
+                      "type": "boolean"
+                    },
+                    "path": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "PEMMDB data: a directory with the ENTSO-E node files `PEMMDB_<node>[_OFF]_NationalTrends_<year>.xlsx`, or a CSV with columns `node`, `technology`, `capacity` (MW) and optional `energy` (MWh). `{year}` is replaced by the PEMMDB year of the planning horizon (see `year_map`). If not set, the dataset `data.pemmdb` is retrieved (rule `retrieve_pemmdb`) and its `<year>` directory is used."
+                    },
+                    "year_map": {
+                      "additionalProperties": {
+                        "type": "integer"
+                      },
+                      "description": "Planning horizon to PEMMDB year, e.g. `{2025: 2030}` if no PEMMDB data exists for a horizon. Unlisted horizons use their own year.",
+                      "type": "object"
+                    },
+                    "node_map": {
+                      "additionalProperties": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "description": "PEMMDB node to region codes of the network (AC bus name without the `AC` suffix, e.g. `DE` at `clustering.administrative.level: 0`, `DE00` or `ITCN` at level `bz`). Regions not in the network are skipped. Nodes without an existing mapped region are matched to the region of the same name (bidding zones) and otherwise to all regions of their country (first two letters, UK -> GB), e.g. offshore nodes such as `DEKF`.",
+                      "type": "object"
+                    },
+                    "technology_map": {
+                      "additionalProperties": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "description": "Regular expression (case-insensitive, first match wins) on the PEMMDB technology to network targets; `\\1` inserts the first group, e.g. the plant class. A target matches components named `<bus> <target>` (e.g. `DEAC coal old 1`, see `sector.conventional_generation_classes`) or with carrier `<target>`; if none exists, the carrier of its first word (e.g. `coal`) is used. Thermal technologies read from the files are named `<fuel> - <type>`, e.g. `Hard coal - old 1`, `Gas - CCGT present 2`. Capacity is split over matching components by their composed capacity, otherwise `p_nom_max`, otherwise equally. An empty list ignores the technology.",
+                      "type": "object"
+                    },
+                    "zero_missing": {
+                      "default": true,
+                      "description": "Set components of mapped carriers to zero in countries covered by the PEMMDB file if PEMMDB has no value for them.",
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "enable": {
+                  "default": false,
+                  "description": "Dispatch only: set all components non-extendable before rule `solve_network`, so no capacities are optimised. Capacities listed in `file` overwrite `p_nom`/`s_nom`/`e_nom`; all other components keep the capacity they have in the composed network. Combine with `rolling_horizon: true` and `load_shedding.enable: true`.",
+                  "type": "boolean"
+                },
+                "file": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Optional CSV with columns `component` (Generator, Link, Line, Store, StorageUnit), `name` (component name in the network) and `capacity` (MW or MWh for stores). The placeholder `{horizon}` is replaced by the planning horizon. Scenario-specific files can be set via `run.scenarios`."
+                }
+              }
+            },
             "clip_p_max_pu": {
               "default": 0.01,
               "description": "To avoid too small values in the renewables` per-unit availability time series values below this threshold are set to zero.",
@@ -15774,6 +16182,26 @@
           }
         },
         "gem_gcct": {
+          "description": "Configuration for a single data source.",
+          "properties": {
+            "source": {
+              "default": "archive",
+              "description": "Source of the data. 'archive' retrieves pre-built data, 'primary' retrieves from primary source.",
+              "enum": [
+                "archive",
+                "primary",
+                "build"
+              ],
+              "type": "string"
+            },
+            "version": {
+              "default": "latest",
+              "description": "Version of the data to use. Uses the specific 'version' for the selected 'source' or the dataset tagged 'latest' for this source.",
+              "type": "string"
+            }
+          }
+        },
+        "pemmdb": {
           "description": "Configuration for a single data source.",
           "properties": {
             "source": {

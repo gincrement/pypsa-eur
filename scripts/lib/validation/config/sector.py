@@ -1106,6 +1106,16 @@ class SectorConfig(BaseModel):
         description="Add a more detailed description of conventional carriers. Any power generation requires the consumption of fuel from nodes representing that fuel.",
     )
 
+    conventional_generation_classes: dict[str, dict[str, float]] = Field(
+        default_factory=dict,
+        description="Split conventional generators into plant classes with individual efficiencies, e.g. `coal: {old 1: 0.35, old 2: 0.40, new: 0.46, CCS: 0.38}` adds the links `<node> coal old 1`, ... instead of `<node> coal`. Keys must be generators in `conventional_generation`. Classes containing `CCS` capture `conventional_generation_ccs_capture_rate` of the CO2 to the `co2 stored` bus.",
+    )
+
+    conventional_generation_ccs_capture_rate: float = Field(
+        0.9,
+        description="Share of CO2 captured by conventional generator classes containing `CCS`.",
+    )
+
     industry_heat: _IndustryHeatConfig = Field(
         default_factory=_IndustryHeatConfig,
         description="Endogenous supply of industry process heat.",

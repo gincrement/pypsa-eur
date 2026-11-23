@@ -3,11 +3,32 @@
 # SPDX-License-Identifier: MIT
 
 
+rule build_pemmdb_capacities:
+    """Maps PEMMDB capacities per market node and technology onto network components."""
+    input:
+        network=resources("networks/composed_{horizon}.nc"),
+        pemmdb=input_pemmdb,
+    output:
+        capacities=resources("fixed_capacities_pemmdb_{horizon}.csv"),
+        pemmdb=resources("pemmdb_{horizon}.csv"),
+    log:
+        logs("build_pemmdb_capacities_{horizon}.log"),
+    params:
+        pemmdb=config_provider("solving", "options", "fixed_capacities", "pemmdb"),
+        pemmdb_path=pemmdb_path,
+        max_hours=config_provider("electricity", "max_hours"),
+    resources:
+        mem_mb=4000,
+    script:
+        scripts("build_pemmdb_capacities.py")
+
+
 rule solve_network:
     """Optimises investment and dispatch for one planning horizon to minimise total system cost."""
     input:
         network=resources("networks/composed_{horizon}.nc"),
         base_network=input_fixed_base_network,
+        fixed_capacities=input_fixed_capacities,
     output:
         network=RESULTS + "networks/solved_{horizon}.nc",
         model=(

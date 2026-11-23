@@ -525,7 +525,7 @@ load:
   fill_gaps:
     enable: true
     interpolate_limit: 6
-    time_shift_for_large_gaps: 1W
+    time_shift_for_large_gaps: 1w
   manual_adjustments: true
   scaling_factor: 1.0
   fixed_year: false
@@ -1080,6 +1080,8 @@ sector:
   conventional_generation:
     OCGT: gas
     CCGT: gas
+  conventional_generation_classes: {}
+  conventional_generation_ccs_capture_rate: 0.9
   industry_heat:
     enable: false
     min_part_load: 0.8
@@ -1328,6 +1330,72 @@ adjustments:
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration/#solving_cf
 solving:
   options:
+    fixed_capacities:
+      pemmdb:
+        enable: false
+        path:
+        year_map: {}
+        node_map:
+          UK00:
+          - GB
+          - GB00
+          UKNI:
+          - GBI
+          - GBNI
+        technology_map:
+          ^nuclear:
+          - nuclear
+          "^hard coal - (.+)$":
+          - coal \1
+          "^lignite - (.+)$":
+          - lignite \1
+          "^gas - conventional (.+)$":
+          - CCGT conventional \1
+          "^gas - ccgt (.+)$":
+          - CCGT \1
+          "^gas - ocgt (.+)$":
+          - OCGT \1
+          ^light oil:
+          - oil light
+          "^heavy oil - (.+)$":
+          - oil heavy \1
+          "^oil shale - (.+)$":
+          - oil shale \1
+          "^hydrogen - (ccgt|ocgt)":
+          - H2 turbine
+          "^hydrogen - fuel cell":
+          - H2 Fuel Cell
+          "run of river|pondage":
+          - ror
+          reservoir:
+          - hydro
+          pump storage:
+          - PHS
+          ^wind onshore:
+          - onwind
+          ^wind offshore:
+          - "offwind-ac"
+          - "offwind-dc"
+          - "offwind-float"
+          ^solar pv rooftop:
+          - solar rooftop
+          ^solar pv$:
+          - solar
+          - "solar-hsat"
+          ^battery utility:
+          - battery
+          ^battery residential:
+          - home battery
+          ^electrolyser:
+          - H2 Electrolysis
+          biomass:
+          - urban central solid biomass CHP
+          geothermal:
+          - geothermal
+          "marine|waste|not defined|other non-res|dsr|solar thermal": []
+        zero_missing: true
+      enable: false
+      file:
     clip_p_max_pu: 0.01
     load_shedding:
       enable: false
@@ -1345,9 +1413,7 @@ solving:
     rolling_horizon: false
     seed: 123
     custom_extra_functionality: ../scripts/custom_extra_functionality.py
-    assign_all_duals: true
-    include_objective_constant: true
-    io_api: true
+    io_api:
     track_iterations: false
     min_iterations: 2
     max_iterations: 3
@@ -1518,6 +1584,9 @@ data:
     version: latest
   gem_gcct:
     source: archive
+    version: latest
+  pemmdb:
+    source: primary
     version: latest
   instrat_co2_prices:
     source: primary
