@@ -193,10 +193,9 @@ def plot_prices(prices: pd.DataFrame, meta: dict, horizon, pdf: PdfPages) -> Non
     pd.DataFrame(
         {
             "base: country average": avg["base"],
-            "scenario: country average": avg["value"],
             "scenario: additional load bus": add["value"],
         }
-    ).set_axis(xlabels).plot.bar(ax=ax1, width=0.85, color=["0.6", "C0", "C3"])
+    ).set_axis(xlabels).plot.bar(ax=ax1, width=0.85, color=["0.6", "C3"])
     ax1.set_ylabel("time-weighted marginal price [EUR/MWh]")
     ax1.set_title(f"Electricity price in the scenario's target country ({horizon})")
     ax1.legend(fontsize="small")
