@@ -35,8 +35,8 @@ All tables have the columns ``value`` (of the scenario), ``base`` and
 - ``capacities.csv``: (horizon, scenario, component, unit, country, carrier)
 - ``capacity_difference.csv``: as above, only rows with a difference above
   ``threshold``
-- ``comparison.pdf``: per horizon one page with the prices and one page per
-  target country with the capacity differences of its scenarios (rows with
+- ``comparison.pdf``: per horizon one page with the prices grouped by target
+  country (one bar per hourly matching target) and one page per target country with the capacity differences of its scenarios (rows with
   differences below ``plot_threshold`` are hidden).
 """
 
@@ -171,10 +171,26 @@ def compare_to_base(
     return pd.concat(out, names=["scenario"])
 
 
+def bar_keys(index: pd.MultiIndex, meta: dict) -> pd.Series:
+    """
+    Bar label of each (scenario, country) within its country group: the
+    hourly matching target (e.g. ``hm 80%``), or the scenario name if the
+    target does not identify a scenario uniquely within a country.
+    """
+    keys = pd.Series(
+        [f"hm {meta[s]['target']:.0%}" for s, _ in index], index=index, dtype=object
+    )
+    countries = index.get_level_values("country")
+    if keys.groupby(countries).apply(lambda k: k.duplicated().any()).any():
+        keys[:] = index.get_level_values("scenario")
+    return keys
+
+
 def plot_prices(prices: pd.DataFrame, meta: dict, horizon, pdf: PdfPages) -> None:
     """
-    Average price in each scenario's target country and price at the bus of
-    the additional load, next to the base's average price there.
+    Prices grouped by target country: per country the base's average price
+    next to the price at the bus of the additional load of each scenario
+    (one bar per hourly matching target), and the differences to the base.
     """
     avg = prices.xs("price time-weighted", level="metric")  # (scenario, country)
     if avg.empty:
@@ -184,33 +200,56 @@ def plot_prices(prices: pd.DataFrame, meta: dict, horizon, pdf: PdfPages) -> Non
     else:
         logger.warning(f"No '{ADDITIONAL_PRICE}' found; is the additional load added?")
         add = pd.DataFrame(np.nan, index=avg.index, columns=avg.columns)
-    order = sorted(avg.index, key=lambda i: (country_group(meta, i[0]), i))
-    avg, add = avg.loc[order], add.loc[order]
-    xlabels = [f"{s}\n({ct})" for s, ct in avg.index]
-    fig, (ax1, ax2) = plt.subplots(
-        2, 1, figsize=(max(7, 0.7 * len(avg) + 3), 8), sharex=True
+
+    keys = bar_keys(avg.index, meta)
+    target = pd.Series([meta[s]["target"] for s, _ in avg.index], index=avg.index)
+    order = (
+        pd.DataFrame({"key": keys, "target": target})
+        .sort_values(["target", "key"])["key"]
+        .drop_duplicates()
+        .tolist()
     )
-    pd.DataFrame(
-        {
-            "base: country average": avg["base"],
-            "scenario: additional load bus": add["value"],
-        }
-    ).set_axis(xlabels).plot.bar(ax=ax1, width=0.85, color=["0.6", "C3"])
-    ax1.set_ylabel("time-weighted marginal price [EUR/MWh]")
-    ax1.set_title(f"Electricity price in the scenario's target country ({horizon})")
-    ax1.legend(fontsize="small")
-    pd.DataFrame(
-        {
-            "country average": avg["difference"],
-            "additional load bus": add["difference"],
-        }
-    ).set_axis(xlabels).plot.bar(ax=ax2, width=0.7, color=["C0", "C3"])
-    ax2.axhline(0, color="k", lw=0.8)
-    ax2.set_ylabel("difference to base country average [EUR/MWh]")
-    ax2.set_xlabel("")
-    ax2.legend(fontsize="small")
-    for ax in (ax1, ax2):
+
+    def by_country(s: pd.Series) -> pd.DataFrame:
+        df = s.set_axis(pd.MultiIndex.from_arrays(
+            [avg.index.get_level_values("country"), keys], names=["country", "key"]
+        )).unstack("key")
+        return df.reindex(columns=order).sort_index()
+
+    base = avg["base"].groupby(level="country").first().sort_index()
+    add_price = by_country(add["value"])
+    add_diff = by_country(add["difference"])
+    avg_diff = by_country(avg["difference"])
+
+    colors = plt.cm.Reds(np.linspace(0.35, 0.9, len(order)))
+    width = min(0.85, 0.25 * (len(order) + 1))
+    fig, (ax1, ax2, ax3) = plt.subplots(
+        3,
+        1,
+        figsize=(max(7, (0.3 * len(order) + 0.6) * len(base) + 3), 10),
+        sharex=True,
+    )
+    pd.concat([base.rename("base: country average"), add_price], axis=1).plot.bar(
+        ax=ax1, width=width, color=["0.6", *colors]
+    )
+    ax1.set_ylabel("time-weighted marginal\nprice [EUR/MWh]")
+    ax1.set_title(
+        f"Electricity price at the additional load bus per target country ({horizon})"
+    )
+    add_diff.plot.bar(ax=ax2, width=width * len(order) / (len(order) + 1), color=colors)
+    ax2.set_ylabel("additional load bus:\ndifference to base [EUR/MWh]")
+    avg_diff.plot.bar(
+        ax=ax3,
+        width=width * len(order) / (len(order) + 1),
+        color=plt.cm.Blues(np.linspace(0.35, 0.9, len(order))),
+    )
+    ax3.set_ylabel("country average:\ndifference to base [EUR/MWh]")
+    ax3.set_xlabel("")
+    ax3.tick_params(axis="x", labelrotation=0)
+    for ax in (ax1, ax2, ax3):
+        ax.axhline(0, color="k", lw=0.8)
         ax.grid(axis="y", alpha=0.3)
+        ax.legend(fontsize="small", ncol=len(order) + 1)
     fig.tight_layout()
     pdf.savefig(fig)
     plt.close(fig)
