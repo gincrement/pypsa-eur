@@ -14,3 +14,6 @@ solving:
       enable: false
       pemmdb:
         year_map: {2025: 2030}
+  solver_options:
+    "gurobi-default":
+      threads: 4 # 32

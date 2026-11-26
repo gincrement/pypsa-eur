@@ -19,7 +19,11 @@ import logging
 import geopandas as gpd
 import pandas as pd
 
-from scripts._helpers import configure_logging, set_scenario_config
+from scripts._helpers import (
+    configure_logging,
+    select_year_with_fallback,
+    set_scenario_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +40,12 @@ if __name__ == "__main__":
     demand = pd.read_csv(snakemake.input.demand, index_col=[0, 1])[
         "total international navigation"
     ]
-    demand = demand.xs(snakemake.params.energy_totals_year, level=1)
+    demand = select_year_with_fallback(
+        demand,
+        snakemake.params.energy_totals_year,
+        level="year",
+        name=snakemake.input.demand,
+    )
 
     # read port data into GeoDataFrame
     with open(snakemake.input.ports, encoding="latin_1") as f:

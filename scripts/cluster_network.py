@@ -182,7 +182,7 @@ def copperplate_buses(n: pypsa.Network, copperplate_regions: list[list[str]]) ->
 
     # Remove connections between buses in the same zone
     for c in n.branch_components:
-        df = n.static(c)
+        df = n.c[c].static
         bus0_zones = df.bus0.map(buses_to_regions).values
         bus1_zones = df.bus1.map(buses_to_regions).values
         to_remove = df.index[bus0_zones == bus1_zones]

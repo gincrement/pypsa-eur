@@ -37,6 +37,7 @@ from pypsa.geo import haversine_pts
 from scripts._helpers import (
     get,
     get_temporal_resolution,
+    select_year_with_fallback,
 )
 from scripts.add_electricity import calculate_annuity, flatten
 from scripts.build_co2_totals import build_co2_totals, build_eea_co2, build_eurostat_co2
@@ -6714,8 +6715,60 @@ def add_import_options(
         )
 
 
+def add_battery(
+    n: pypsa.Network, bus: str, location: str, country: str, costs: pd.DataFrame
+) -> None:
+    """
+    Add an extendable battery (store, charger, discharger) at ``bus`` from
+    ``costs``, named as in the sector-coupled network (``<bus> battery ...``).
+    """
+    b = f"{bus} battery"
+    n.add(
+        "Carrier",
+        ["battery", "battery charger", "battery discharger"],
+        overwrite=True,
+    )
+    n.add(
+        "Bus",
+        b,
+        carrier="battery",
+        location=location,
+        country=country,
+        unit="MWh",
+        x=n.c.buses.static.at[location, "x"],
+        y=n.c.buses.static.at[location, "y"],
+    )
+    n.add(
+        "Store",
+        b,
+        bus=b,
+        carrier="battery",
+        e_cyclic=True,
+        e_nom_extendable=True,
+        capital_cost=costs.at["battery storage", "capital_cost"],
+        lifetime=costs.at["battery storage", "lifetime"],
+    )
+    eff = costs.at["battery inverter", "efficiency"] ** 0.5
+    # charger before discharger keeps add_battery_constraints pairing
+    n.add(
+        "Link",
+        [f"{b} charger", f"{b} discharger"],
+        bus0=[bus, b],
+        bus1=[b, bus],
+        carrier=["battery charger", "battery discharger"],
+        efficiency=eff,
+        capital_cost=[costs.at["battery inverter", "capital_cost"], 0.0],
+        marginal_cost=costs.at["battery inverter", "marginal_cost"],
+        lifetime=costs.at["battery inverter", "lifetime"],
+        p_nom_extendable=True,
+    )
+
+
 def add_additional_flat_load(
-    n: pypsa.Network, loads_mw: dict, matching: dict | None = None
+    n: pypsa.Network,
+    loads_mw: dict,
+    matching: dict | None = None,
+    costs: pd.DataFrame | None = None,
 ) -> None:
     """
     Add a constant electricity demand (MW) per country, e.g. a new industrial
@@ -6727,6 +6780,11 @@ def add_additional_flat_load(
     curtailed grid VRE (matched) and an export link. The hourly matching constraint
     itself is added at solve time in ``scripts/custom_extra_functionality.py``,
     which reads its settings from ``n.meta["hourly_matching"]``.
+
+    Works for sector-coupled and electricity-only networks: if the node has
+    no extendable VRE (e.g. all capacities fixed), its existing VRE generators
+    are copied as extendable; if it has no battery store, the consumer's
+    battery is built from ``costs``.
     """
     matching = matching or {}
     use_matching = matching.get("target", 0.0) > 0
@@ -6769,7 +6827,16 @@ def add_additional_flat_load(
         )
         ci = f"{node} CI"
         ci_nodes.append(ci)
-        n.add("Bus", ci, carrier="AC", location=node, country=ct, unit="MW")
+        n.add(
+            "Bus",
+            ci,
+            carrier="AC",
+            location=node,
+            country=ct,
+            unit="MW",
+            x=n.c.buses.static.at[node, "x"],
+            y=n.c.buses.static.at[node, "y"],
+        )
         n.add(
             "Load",
             ci,
@@ -6797,17 +6864,19 @@ def add_additional_flat_load(
         )
 
         # dedicated newly built VRE, copying costs and profiles of the node
-        gens = n.c.generators.static.index[
-            (n.c.generators.static.bus == node)
-            & n.c.generators.static.carrier.isin(matching["carriers"])
-            & n.c.generators.static.p_nom_extendable
-        ]
+        gen = n.c.generators.static
+        at_node = (gen.bus == node) & gen.carrier.isin(matching["carriers"])
+        gens = gen.index[at_node & gen.p_nom_extendable]
         if gens.empty:
-            raise ValueError(f"hourly_matching: no extendable VRE found at {node}.")
-        new = n.c.generators.static.loc[gens].copy()
+            # e.g. electricity-only runs with fixed capacities
+            gens = gen.index[at_node]
+        if gens.empty:
+            raise ValueError(f"hourly_matching: no VRE found at {node}.")
+        new = gen.loc[gens].copy()
         new.index = new.index + " CI"
         new["bus"] = ci
         new[["p_nom", "p_nom_min"]] = 0.0
+        new["p_nom_extendable"] = True
         new["build_year"] = n.c.generators.static.loc[gens, "build_year"].values
         n.add("Generator", new.index, **new)
         p_max_pu = n.c.generators.dynamic.p_max_pu.reindex(columns=gens)
@@ -6832,7 +6901,14 @@ def add_additional_flat_load(
             df[f"{ext}_extendable"] = True
             n.add(c, df.index, **df)
 
-        if "battery" in matching["storage"]:
+        has_battery = f"{node} battery" in n.c.stores.static.index
+        if "battery" in matching["storage"] and not has_battery:
+            if costs is None:
+                raise ValueError(
+                    f"hourly_matching: no battery at {node} and no costs given."
+                )
+            add_battery(n, ci, node, ct, costs)
+        elif "battery" in matching["storage"]:
             n.add(
                 "Bus",
                 f"{ci} battery",
@@ -6930,7 +7006,9 @@ def main(
 
     fn = inputs.heating_efficiencies
     year = int(params["energy_totals_year"])
-    heating_efficiencies = pd.read_csv(fn, index_col=[1, 0]).loc[year]
+    heating_efficiencies = select_year_with_fallback(
+        pd.read_csv(fn, index_col=[1, 0]), year, level="year", name=fn
+    )
 
     spatial = define_spatial(pop_layout.index, options)
 
@@ -7220,11 +7298,5 @@ def main(
     )
     if options["cluster_heat_buses"] and not first_year_myopic:
         cluster_heat_buses(n)
-
-    add_additional_flat_load(
-        n,
-        cf_industry.get("additional_flat_load", {}),
-        cf_industry.get("hourly_matching", {}),
-    )
 
     logger.info("Completed sector components")

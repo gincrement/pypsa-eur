@@ -79,9 +79,7 @@ COUNTRY_ALIASES = {"UK": "GB", "EL": "GR"}
 def _rows(wb, sheet: str, max_row: int = 60, max_col: int = 40) -> list[tuple]:
     if sheet not in wb.sheetnames:
         return []
-    return list(
-        wb[sheet].iter_rows(max_row=max_row, max_col=max_col, values_only=True)
-    )
+    return list(wb[sheet].iter_rows(max_row=max_row, max_col=max_col, values_only=True))
 
 
 def _num(value) -> float:
@@ -142,9 +140,7 @@ def read_hydro(wb) -> list[tuple]:
     v = _labelled(_rows(wb, "Hydro", max_col=2))
 
     def get(prefix: str, what: str) -> float:
-        key = next(
-            (k for k in v if k.startswith(prefix) and what in k), None
-        )
+        key = next((k for k in v if k.startswith(prefix) and what in k), None)
         return v[key] if key is not None else 0.0
 
     out = [("Hydro Run of River", get("Run of River", "turbining"), np.nan)]
@@ -167,7 +163,12 @@ def read_hydro(wb) -> list[tuple]:
 def read_battery(wb) -> list[tuple]:
     out = []
     for r in _rows(wb, "Battery", max_col=5):
-        if r and isinstance(r[0], str) and r[0].startswith("Battery ") and r[0] != "Battery Total":
+        if (
+            r
+            and isinstance(r[0], str)
+            and r[0].startswith("Battery ")
+            and r[0] != "Battery Total"
+        ):
             out.append((r[0].strip(), _num(r[2]), _num(r[4])))
     return out
 
@@ -184,9 +185,7 @@ def read_electrolyser(wb) -> list[tuple]:
 def read_other_res(wb) -> list[tuple]:
     rows = _rows(wb, "Other RES", max_row=10, max_col=9)
     names = next((r for r in rows if r and r[4] == "Small Biomass"), None)
-    values = next(
-        (r for r in rows if r and r[3] == "Installed capacity (MW):"), None
-    )
+    values = next((r for r in rows if r and r[3] == "Installed capacity (MW):"), None)
     if names is None or values is None:
         return []
     return [
@@ -200,7 +199,11 @@ def read_other_non_res(wb) -> list[tuple]:
     rows = _rows(wb, "Other Non-RES", max_row=10, max_col=60)
     bands = next((r for r in rows if r and r[2] == "Price Band 1"), None)
     caps = next(
-        (r for r in rows if r and isinstance(r[1], str) and r[1].startswith("Installed capacity")),
+        (
+            r
+            for r in rows
+            if r and isinstance(r[1], str) and r[1].startswith("Installed capacity")
+        ),
         None,
     )
     if bands is None or caps is None:
@@ -342,7 +345,9 @@ def component_locations(n: pypsa.Network, c: str) -> pd.Series:
     loc = n.buses.location.where(n.buses.location != "", n.buses.index)
     if c == "Link":
         bus = static.bus1.map(loc)
-        return bus.where(bus.isin(n.buses.index[n.buses.carrier == "AC"]), static.bus0.map(loc))
+        return bus.where(
+            bus.isin(n.buses.index[n.buses.carrier == "AC"]), static.bus0.map(loc)
+        )
     return static.bus.map(loc)
 
 
@@ -365,7 +370,9 @@ def electric_buses(n: pypsa.Network) -> pd.Index:
     return n.buses.index[n.buses.carrier.isin(["AC", "low voltage"])]
 
 
-def candidates(n: pypsa.Network, targets: list[str], buses: list[str], locs: dict) -> list:
+def candidates(
+    n: pypsa.Network, targets: list[str], buses: list[str], locs: dict
+) -> list:
     """
     Components matching the targets at the buses.
     """
@@ -486,7 +493,11 @@ def build_capacities(
         kinds = [t for t in targets if t in STORES]
         if kinds:
             for kind in kinds:
-                e = energy if not np.isnan(energy) else power * max_hours.get("battery", 2.0)
+                e = (
+                    energy
+                    if not np.isnan(energy)
+                    else power * max_hours.get("battery", 2.0)
+                )
                 rows_kind = storage(n, kind, bus_list, power, e)
                 if not rows_kind and power > 0:
                     unassigned.append((kind, bus_list, power))
@@ -537,7 +548,12 @@ def build_capacities(
                 f"Set {len(zero)} components without PEMMDB value to zero (zero_missing)."
             )
             out = pd.concat(
-                [out, pd.DataFrame(zero, columns=["component", "name"]).assign(capacity=0.0)],
+                [
+                    out,
+                    pd.DataFrame(zero, columns=["component", "name"]).assign(
+                        capacity=0.0
+                    ),
+                ],
                 ignore_index=True,
             )
 
@@ -577,7 +593,9 @@ if __name__ == "__main__":
     n = pypsa.Network(snakemake.input.network)
     pemmdb_path = snakemake.params.pemmdb_path
     pemmdb = read_pemmdb(pemmdb_path)
-    out = build_capacities(n, pemmdb, snakemake.params.pemmdb, snakemake.params.max_hours)
+    out = build_capacities(
+        n, pemmdb, snakemake.params.pemmdb, snakemake.params.max_hours
+    )
 
     pemmdb.to_csv(snakemake.output.pemmdb, index=False)
     with open(snakemake.output.capacities, "w") as f:

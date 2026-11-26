@@ -47,6 +47,9 @@ from scripts.prepare_network import main as prepare_network_for_solving
 from scripts.prepare_perfect_foresight import apply_phase_outs
 from scripts.prepare_perfect_foresight import main as prepare_perfect_foresight
 from scripts.prepare_sector_network import (
+    add_additional_flat_load,
+)
+from scripts.prepare_sector_network import (
     main as add_sector_components,
 )
 
@@ -95,6 +98,14 @@ if __name__ == "__main__":
 
     if sector_mode:
         add_sector_components(n, inputs, params, costs, nyears, current_horizon)
+
+    # in both electricity-only and sector-coupled mode
+    add_additional_flat_load(
+        n,
+        params.industry.get("additional_flat_load", {}),
+        params.industry.get("hourly_matching", {}),
+        costs,
+    )
 
     apply_temporal_aggregation(n, inputs, params)
 

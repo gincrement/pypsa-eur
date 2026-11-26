@@ -386,6 +386,7 @@ if config["run"].get("scenarios", {}).get("enable", False):
         + (config["run"]["prefix"] + "/" if config["run"].get("prefix") else "")
         + "comparison/"
     )
+
     def _scenario_targets(name):
         industry = scenario_config(name).get("industry", {})
         return dict(

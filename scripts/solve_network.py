@@ -241,7 +241,7 @@ def emission_stores(
     bus_carrier = n.stores.bus.map(n.buses.carrier)
     stores = n.stores[bus_carrier.isin(emissions) & ~n.stores.e_cyclic]
     seeded = stores.index[
-        (stores.e_initial.ne(0) & ~allow_initial) | stores.e_initial_per_period
+        (stores.e_initial.ne(0) & (not allow_initial)) | stores.e_initial_per_period
     ]
     if not seeded.empty:
         raise ValueError(
@@ -499,9 +499,16 @@ def fix_to_base(n: pypsa.Network, base: pypsa.Network, matching: dict) -> None:
         if df.empty:
             continue
         base_df = base.c[c].static
+        # capacity of the base: optimum if extendable there, otherwise the
+        # fixed capacity (e.g. PEMMDB capacities of a dispatch-only base)
+        base_cap = base_df[f"{nom}_opt"].where(
+            base_df[f"{nom}_extendable"], base_df[nom]
+        )
         common = df.index.intersection(base_df.index)
-        df.loc[common, nom] = base_df.loc[common, f"{nom}_opt"]
+        df.loc[common, nom] = base_cap[common]
         df.loc[common, f"{nom}_extendable"] = False
+        if c == "StorageUnit":
+            df.loc[common, "max_hours"] = base_df.loc[common, "max_hours"]
         if c == "Line":
             # impedances as updated by iterative transmission expansion
             df.loc[common, ["x", "r"]] = base_df.loc[common, ["x", "r"]]
@@ -529,9 +536,7 @@ def fix_to_base(n: pypsa.Network, base: pypsa.Network, matching: dict) -> None:
                     continue
                 p_max = base_df.at[parent, "p_nom_max"]
                 if np.isfinite(p_max):
-                    df.at[g, "p_nom_max"] = max(
-                        p_max - base_df.at[parent, "p_nom_opt"], 0.0
-                    )
+                    df.at[g, "p_nom_max"] = max(p_max - base_cap[parent], 0.0)
 
     # transmission expansion limits are void with fixed lines and links
     glc = n.c.global_constraints.static
@@ -1085,6 +1090,10 @@ def add_TES_energy_to_power_ratio_constraints(n: pypsa.Network) -> None:
     RuntimeError
         If the TES storage and charger indices do not align.
     """
+    if n.stores.empty or n.links.empty:
+        # empty components have an integer RangeIndex, so .str accessor would fail
+        return
+
     indices_charger_p_nom_extendable = n.links.index[
         n.links.index.str.contains("water tanks charger|water pits charger")
         & n.links.p_nom_extendable
@@ -1150,6 +1159,9 @@ def add_TES_charger_ratio_constraints(n: pypsa.Network) -> None:
     RuntimeError
         If the charger and discharger indices do not align.
     """
+    if n.links.empty:
+        return
+
     indices_charger_p_nom_extendable = n.links.index[
         n.links.index.str.contains(
             "water tanks charger|water pits charger|aquifer thermal energy storage charger"
@@ -1682,15 +1694,28 @@ if __name__ == "__main__":
     n = pypsa.Network(snakemake.input.network)
     planning_horizons = snakemake.wildcards.horizon
 
-    if snakemake.input.get("base_network"):
+    fixed_to_base = bool(snakemake.input.get("base_network"))
+    if fixed_to_base:
+        # sensitivity: capacities of the (dispatch-only) base, only the
+        # consumer's dedicated VRE and storage (" CI") are optimised
         logger.info(f"Fixing capacities to {snakemake.input.base_network}")
         fix_to_base(
             n,
             pypsa.Network(snakemake.input.base_network),
             snakemake.config["industry"]["hourly_matching"],
         )
+        # investment needs one optimisation over all snapshots; the base
+        # capacities already include PEMMDB, and fix_capacities would also
+        # fix the consumer's components
+        if cf_solving.get("rolling_horizon", False):
+            logger.info(
+                "Disabling rolling horizon: the consumer's capacities are "
+                "optimised over all snapshots at once."
+            )
+        cf_solving["rolling_horizon"] = False
+        snakemake.config["solving"]["options"]["rolling_horizon"] = False
 
-    if cf_solving["fixed_capacities"]["enable"]:
+    if cf_solving["fixed_capacities"]["enable"] and not fixed_to_base:
         # PEMMDB capacities first, custom capacity file last (takes precedence)
         fns = snakemake.input.get("fixed_capacities") or []
         fix_capacities(n, [fns] if isinstance(fns, str) else list(fns))

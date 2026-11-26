@@ -179,7 +179,11 @@ def plot_prices(prices: pd.DataFrame, meta: dict, horizon, pdf: PdfPages) -> Non
     avg = prices.xs("price time-weighted", level="metric")  # (scenario, country)
     if avg.empty:
         return
-    add = prices.xs(ADDITIONAL_PRICE, level="metric").reindex(avg.index)
+    if ADDITIONAL_PRICE in prices.index.unique("metric"):
+        add = prices.xs(ADDITIONAL_PRICE, level="metric").reindex(avg.index)
+    else:
+        logger.warning(f"No '{ADDITIONAL_PRICE}' found; is the additional load added?")
+        add = pd.DataFrame(np.nan, index=avg.index, columns=avg.columns)
     order = sorted(avg.index, key=lambda i: (country_group(meta, i[0]), i))
     avg, add = avg.loc[order], add.loc[order]
     xlabels = [f"{s}\n({ct})" for s, ct in avg.index]

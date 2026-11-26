@@ -7,42 +7,35 @@
 #   snakemake --configfile config/config.common.yaml config/config.2025.yaml
 
 run:
-  name: all  # runs every scenario in config/scenarios.yaml
+  name: all    # runs every scenario in config/scenarios.yaml
   scenarios:
-    enable: false
+    enable: true
     file: config/scenarios_some.yaml
     # file: config/scenarios_all.yaml
   disable_progressbar: true
   shared_resources:
     policy: base  # share network/renewable resources; composed networks stay per scenario
 
-# countries: is not needed as by default all countries are considered
-# countries: ['DE', 'FR', 'ES', 'PL', 'IT', 'AT', 'CH']
+snapshots:
+  start: "2025-01-01 00:00"
+  end: "2025-12-31 23:00"
+
+atlite:
+  default_cutout: "europe-2025-sarah3-era5"
+  cutouts:
+    "europe-1940-2025-era5":
+      time:
+      - '2025'
+      - '2025'
 
 clustering:
   mode: administrative
   administrative:
-    level: 0                 # could be "bz" for bidding zone
-  copperplate_regions:      # will be removed in the final version
-  - ["DE"]                  # > start countries of interest
-  - ["FR"]                  #
-  - ["PL"]                  #
-  - ["IT"]                  #
-  - ["ES"]                  # > end countries of interest
-  - ["PT"]
-  - ["DK"]
-  - ["NL", "BE", "LU"]
-  - ["GB", "IE"]
-  - ["CH", "AT", "HU", "CZ", "SK"]
-  - ["LV", "LT", "EE", "FI"]
-  - ["SI", "HR", "BA", "RS", "ME", "MK", "XK"]
-  - ["AL", "BG", "GR", "RO"]
-  - ["SE", "NO"]
+    level: bz                 # based on bidding zone's
   temporal:
-    averaging: 3h # for testing
+    averaging: false          # 3h for testing
   simplify_network:
-    remove_stubs: false
-    remove_stubs_across_borders: false
+    consider_efficiency_classes: [0.16, 0.5, 0.84] # bool | list[float] = False,
 
 solving:
   options:
@@ -53,29 +46,35 @@ solving:
       enable: true
       pemmdb:
         enable: true
-        path:                          # unset: retrieve data.pemmdb; or custom dir with PEMMDB_<node>_NationalTrends_<year>.xlsx
-        year_map: {}                   # e.g. {2025: 2030}; no PEMMDB data for 2025
+        path:                 # unset: retrieve data.pemmdb; or custom dir with PEMMDB_<node>_NationalTrends_<year>.xlsx
+        year_map: {}          # e.g. {2025: 2030}; no PEMMDB data for 2025
       file:   # optional overrides (component,name,capacity), applied after PEMMDB
     load_shedding:
       enable: true            # ensures feasibility with given capacities
-      default_cost: 100000    # EUR/MWh (bus carrier unit)
+      default_cost: 10000     # EUR/MWh (bus carrier unit)
       all_carriers: true
     load_sinks:
       enable: true            # absorbs surplus (e.g. process emissions, biomass) when outlets have no capacity
-      default_cost: 100000
+      default_cost: 10000
       all_carriers: true
-    rolling_horizon: true
-    horizon: 56   # snapshots per window: 7*24 h / temporal.averaging (3h)
-    overlap: 0
-  operations:
-    rolling_horizon: true
-    horizon: 56   # 7*24 h / temporal.averaging (3h)
   solver:
     name: "gurobi"             # default solver is gurobi, could be "highs"
     options: "gurobi-default"  # ... and "highs-default"
 
 # power plant grouping: one link per node and fuel, matching the PEMMDB thermal categories
 sector:
+  enabled: false
+  transport: false
+  heating: false
+  biomass: false
+  industry: false
+  shipping: false
+  aviation: false
+  agriculture: false
+  fossil_fuels: true
+  district_heating:
+    ptes:
+      enable: false
   conventional_generation:
     OCGT: gas
     CCGT: gas
@@ -110,7 +109,7 @@ industry:
     fix_base: true          # fix all capacities to the solved base scenario; only the CI bus may build VRE and battery
     base_scenario: base
     curtailed_import: true  # otherwise curtailed grid VRE (same country/hour) may be imported and counts as matched
-    max_excess_share:       # e.g. 0.2 to cap excess sales to the grid at 20% of consumption
+    max_excess_share: 0.2   # e.g. 0.2 to cap excess sales to the grid at 20% of consumption
 
 plotting:
   tech_colors:
@@ -120,12 +119,31 @@ plotting:
 
 renewable:
   onwind:
-    resource_classes: 2
+    resource_classes: 1
   solar:
-    resource_classes: 2
+    resource_classes: 1
   "offwind-ac":
-    resource_classes: 2
+    resource_classes: 1
   "offwind-dc":
-    resource_classes: 2
+    resource_classes: 1
   "offwind-float":
-    resource_classes: 2
+    resource_classes: 1
+
+electricity:
+  voltages:
+  - 220.0
+  - 300.0
+  - 330.0
+  - 380.0
+  - 400.0
+  - 500.0
+  - 750.0
+  extendable_carriers:
+    Generator: []
+    StorageUnit: []
+    Store: []
+    Link: []
+
+energy:
+  energy_totals_year: 2025
+  base_emissions_year: 1990

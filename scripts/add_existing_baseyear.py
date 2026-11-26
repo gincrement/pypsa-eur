@@ -30,6 +30,7 @@ import powerplantmatching as pm
 import pypsa
 import xarray as xr
 
+from scripts._helpers import select_year_with_fallback
 from scripts.build_energy_totals import cartesian
 from scripts.definitions.heat_system import HeatSystem
 from scripts.prepare_sector_network import cluster_heat_buses, define_spatial
@@ -582,9 +583,12 @@ def add_heating_capacities_installed_before_baseyear(
     logger.debug(f"Adding heating capacities installed before {baseyear}")
 
     # Load heating efficiencies
-    heating_efficiencies = pd.read_csv(efficiency_file, index_col=[1, 0]).loc[
-        energy_totals_year
-    ]
+    heating_efficiencies = select_year_with_fallback(
+        pd.read_csv(efficiency_file, index_col=[1, 0]),
+        energy_totals_year,
+        level="year",
+        name=efficiency_file,
+    )
 
     ratios = []
     valid_grouping_years = []

@@ -247,6 +247,9 @@ def input_fixed_capacities(w) -> list[str]:
     cfg = config_provider("solving", "options", "fixed_capacities", default={})(w)
     if not cfg.get("enable", False):
         return []
+    if input_fixed_base_network(w):
+        # sensitivities take the capacities of the solved base scenario
+        return []
     fns = []
     if cfg.get("pemmdb", {}).get("enable", False):
         # resolve the wildcard pattern first, so the path matches the rule output

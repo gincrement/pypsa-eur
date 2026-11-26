@@ -78,7 +78,8 @@ def add_hourly_matching_constraints(n, snapshots):
     m = n.model
     w = n.snapshot_weightings.generators.loc[snapshots]
     p_link = m["Link-p"]
-    p_nom_gen = m["Generator-p_nom"]
+    # absent in dispatch-only runs (no extendable generators); only used for ext_gen
+    p_nom_gen = m["Generator-p_nom"] if "Generator-p_nom" in m.variables else None
     p_gen = m["Generator-p"]
     ext_gen = n.c.generators.static.index[n.c.generators.static.p_nom_extendable]
     bus_country = n.c.generators.static.bus.map(n.c.buses.static.country)

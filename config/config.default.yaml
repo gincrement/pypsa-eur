@@ -525,7 +525,7 @@ load:
   fill_gaps:
     enable: true
     interpolate_limit: 6
-    time_shift_for_large_gaps: 1w
+    time_shift_for_large_gaps: 1W
   manual_adjustments: true
   scaling_factor: 1.0
   fixed_year: false

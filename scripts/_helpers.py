@@ -1071,3 +1071,74 @@ def _load_data_version(file: str | Path, validate: bool = True) -> pd.DataFrame:
         data_versions = VersionsSchema.validate(data_versions)
 
     return data_versions
+
+
+def select_year_with_fallback(
+    data: pd.DataFrame | pd.Series,
+    year: int,
+    level: str | int = "year",
+    name: str = "data",
+) -> pd.DataFrame | pd.Series:
+    """
+    Select ``year`` from data indexed by (country, year), falling back to the
+    last available value per country and column.
+
+    For every country (all index levels other than ``level``) and every column,
+    the value of the latest year at or before ``year`` that is not NaN is used.
+    This handles datasets that end before the requested year as well as
+    individual series that have gaps in the most recent years. If a country has
+    no data at or before ``year``, its earliest available values are used.
+
+    Parameters
+    ----------
+    data : pd.DataFrame | pd.Series
+        Data with a MultiIndex containing a year level.
+    year : int
+        Requested year.
+    level : str | int
+        Name or position of the year index level.
+    name : str
+        Description of the data used in log messages.
+
+    Returns
+    -------
+    pd.DataFrame | pd.Series
+        Data indexed by the remaining index level(s).
+    """
+    year = int(year)
+    level_name = data.index.names[level] if isinstance(level, int) else level
+    other_levels = [lvl for lvl in data.index.names if lvl != level_name]
+
+    data = data.copy()
+    data.index = data.index.set_levels(
+        data.index.levels[data.index.names.index(level_name)].astype(int),
+        level=level_name,
+    )
+    data = data.sort_index(level=level_name)
+
+    # GroupBy.last/first skip NaN, i.e. take the last/first valid value per column
+    before = data[data.index.get_level_values(level_name) <= year]
+    selected = before.groupby(level=other_levels).last()
+    earliest = data.groupby(level=other_levels).first()
+    selected = selected.reindex(earliest.index).combine_first(earliest)
+
+    if year in data.index.get_level_values(level_name):
+        exact = data.xs(year, level=level_name).reindex(selected.index)
+    else:
+        exact = selected.where(selected.isna())  # all NaN
+    filled = exact.isna() & selected.notna()
+    if filled.to_numpy().any():
+        countries = filled.any(axis=1) if isinstance(filled, pd.DataFrame) else filled
+        countries = countries[countries].index.tolist()
+        last_years = (
+            pd.Series(data.index.get_level_values(level_name), index=data.index)
+            .groupby(level=other_levels)
+            .max()
+        )
+        logger.warning(
+            f"Year {year} not (fully) available in {name} for {countries}. "
+            f"Using last available values per country instead "
+            f"(latest year per country: {last_years.loc[countries].to_dict()})."
+        )
+
+    return selected

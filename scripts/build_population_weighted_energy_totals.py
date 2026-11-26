@@ -16,7 +16,12 @@ import logging
 
 import pandas as pd
 
-from scripts._helpers import configure_logging, get_snapshots, set_scenario_config
+from scripts._helpers import (
+    configure_logging,
+    get_snapshots,
+    select_year_with_fallback,
+    set_scenario_config,
+)
 
 idx = pd.IndexSlice
 
@@ -39,12 +44,25 @@ if __name__ == "__main__":
         )
         data_years = snapshots.year.unique()
     else:
-        data_years = int(snakemake.params.energy_totals_year)
+        data_years = [int(snakemake.params.energy_totals_year)]
 
     pop_layout = pd.read_csv(snakemake.input.clustered_pop_layout, index_col=0)
 
     totals = pd.read_csv(snakemake.input.energy_totals, index_col=[0, 1])
-    totals = totals.loc[idx[:, data_years], :].groupby("country").mean()
+
+    # use last available values per country and column for missing years
+    totals = (
+        pd.concat(
+            [
+                select_year_with_fallback(
+                    totals, y, level="year", name=snakemake.input.energy_totals
+                )
+                for y in data_years
+            ]
+        )
+        .groupby("country")
+        .mean()
+    )
 
     nodal_totals = totals.loc[pop_layout.ct].fillna(0.0)
     nodal_totals.index = pop_layout.index

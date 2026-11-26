@@ -7,3 +7,10 @@
 #   snakemake --configfile config/config.common.yaml config/config.2030.yaml
 
 planning_horizons: 2030
+
+solving:
+  options:
+    fixed_capacities:
+      enable: true
+      pemmdb:
+        year_map: {2030: 2030}

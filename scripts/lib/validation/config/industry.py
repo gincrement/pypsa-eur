@@ -14,6 +14,12 @@ from pydantic import Field
 
 from scripts.lib.validation.config._base import ConfigModel
 
+StorageCarrier = Literal["battery", "H2"]
+
+
+def _default_storage() -> list[StorageCarrier]:
+    return ["battery", "H2"]
+
 
 class _HourlyMatchingConfig(ConfigModel):
     """Configuration for `industry.hourly_matching` settings."""
@@ -36,8 +42,8 @@ class _HourlyMatchingConfig(ConfigModel):
         default_factory=lambda: ["onwind", "solar"],
         description="Generator carriers the consumer may build. Costs and profiles are copied from the node; land potentials are shared with the grid generators.",
     )
-    storage: list[Literal["battery", "H2"]] = Field(
-        default_factory=lambda: ["battery", "H2"],
+    storage: list[StorageCarrier] = Field(
+        default_factory=_default_storage,
         description="Storage technologies the consumer may build.",
     )
     fix_base: bool = Field(

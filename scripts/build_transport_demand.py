@@ -29,6 +29,7 @@ from scripts._helpers import (
     configure_logging,
     generate_periodic_profiles,
     get_snapshots,
+    select_year_with_fallback,
     set_scenario_config,
 )
 
@@ -40,7 +41,9 @@ def build_nodal_transport_data(
 ) -> pd.DataFrame:
     # get numbers of car and fuel efficiency per country
     transport_data = pd.read_csv(fn, index_col=[0, 1])
-    transport_data = transport_data.xs(year, level="year")
+    transport_data = select_year_with_fallback(
+        transport_data, year, level="year", name=fn
+    )
 
     # break number of cars down to nodal level based on population density
     nodal_transport_data = transport_data.loc[pop_layout.ct].fillna(0.0)

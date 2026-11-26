@@ -25,7 +25,11 @@ import logging
 
 import pandas as pd
 
-from scripts._helpers import configure_logging, set_scenario_config
+from scripts._helpers import (
+    configure_logging,
+    select_year_with_fallback,
+    set_scenario_config,
+)
 from scripts.prepare_sector_network import get
 
 logger = logging.getLogger(__name__)
@@ -46,10 +50,17 @@ if __name__ == "__main__":
 
     pop_layout = pd.read_csv(snakemake.input.clustered_pop_layout, index_col=0)
 
-    year = str(snakemake.params.energy_totals_year)
-    district_heat_share = pd.read_csv(snakemake.input.district_heat_share, index_col=0)[
-        year
-    ]
+    year = int(snakemake.params.energy_totals_year)
+    district_heat_share = pd.read_csv(snakemake.input.district_heat_share, index_col=0)
+    district_heat_share = district_heat_share.rename(columns=int).melt(
+        var_name="year", ignore_index=False
+    )
+    district_heat_share = select_year_with_fallback(
+        district_heat_share.set_index("year", append=True)["value"],
+        year,
+        level="year",
+        name=snakemake.input.district_heat_share,
+    )
 
     # make ct-based share nodal
     district_heat_share = district_heat_share.reindex(pop_layout.ct).fillna(0)

@@ -13,12 +13,12 @@ rule build_pemmdb_capacities:
         pemmdb=resources("pemmdb_{horizon}.csv"),
     log:
         logs("build_pemmdb_capacities_{horizon}.log"),
+    resources:
+        mem_mb=4000,
     params:
         pemmdb=config_provider("solving", "options", "fixed_capacities", "pemmdb"),
         pemmdb_path=pemmdb_path,
         max_hours=config_provider("electricity", "max_hours"),
-    resources:
-        mem_mb=4000,
     script:
         scripts("build_pemmdb_capacities.py")
 
