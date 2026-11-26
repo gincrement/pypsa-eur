@@ -24,6 +24,7 @@ remote:
 run:
   prefix: ""
   name: ""
+  network_name: "PyPSA-Eur"
   scenarios:
     enable: false
     file: config/scenarios.yaml

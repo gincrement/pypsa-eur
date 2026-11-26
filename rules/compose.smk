@@ -251,6 +251,7 @@ rule compose_network:
     resources:
         mem_mb=10000,
     params:
+        network_name=config_provider("run", "network_name", default="PyPSA-Eur"),
         foresight=config_provider("foresight"),
         electricity=config_provider("electricity"),
         sector=config_provider("sector"),

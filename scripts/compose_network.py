@@ -157,5 +157,6 @@ if __name__ == "__main__":
             "known pandas/PyPSA MultiIndex limitation."
         )
 
+    n.name = snakemake.params.network_name
     logger.info(f"Exporting composed network for horizon {current_horizon}")
     n.export_to_netcdf(snakemake.output[0])

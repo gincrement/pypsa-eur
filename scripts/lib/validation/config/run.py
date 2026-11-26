@@ -54,6 +54,12 @@ class RunConfig(ConfigModel):
         examples=["my-pypsa-eur-run"],
     )
 
+    network_name: str = Field(
+        "PyPSA-Eur",
+        description="Name stored as ``n.name`` in the composed networks.",
+        examples=["PyPSA-Eur"],
+    )
+
     scenarios: _ScenariosConfig = Field(
         default_factory=_ScenariosConfig,
         description="Configuration for running multiple scenarios",

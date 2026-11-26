@@ -8,10 +8,11 @@
 
 run:
   name: all    # runs every scenario in config/scenarios.yaml
+  network_name: "ElectronBank (PyPSA-Eur)"    # stored as n.name in composed networks
   scenarios:
     enable: true
-    file: config/scenarios_some.yaml
-    # file: config/scenarios_all.yaml
+    # file: config/scenarios_some.yaml
+    file: config/scenarios_all.yaml
   disable_progressbar: true
   shared_resources:
     policy: base  # share network/renewable resources; composed networks stay per scenario
@@ -34,7 +35,7 @@ clustering:
     level: bz                 # based on bidding zone's
   temporal:
     averaging: 6h # false     # 6h for testing
-  consider_efficiency_classes: [0.16, 0.5, 0.84] # bool | list[float] = False,
+  consider_efficiency_classes: true # [0.30, 0.70] # bool | list[float] = False,
 
 solving:
   options:
