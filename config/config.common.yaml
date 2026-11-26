@@ -33,9 +33,8 @@ clustering:
   administrative:
     level: bz                 # based on bidding zone's
   temporal:
-    averaging: false          # 3h for testing
-  simplify_network:
-    consider_efficiency_classes: [0.16, 0.5, 0.84] # bool | list[float] = False,
+    averaging: 6h # false     # 6h for testing
+  consider_efficiency_classes: [0.16, 0.5, 0.84] # bool | list[float] = False,
 
 solving:
   options:
@@ -60,6 +59,18 @@ solving:
   solver:
     name: "gurobi"             # default solver is gurobi, could be "highs"
     options: "gurobi-default"  # ... and "highs-default"
+
+# hourly matching of the additional 100 MW load; enabled per scenario via target > 0 (config/scenarios.yaml)
+industry:
+  hourly_matching:
+    mode: hourly            # matching granularity: hourly | daily | weekly | monthly | annual
+    target_scope: period    # period: target met in every period; annual: target = annual share matched at that granularity
+    carriers: [onwind, solar]
+    storage: [battery]
+    fix_base: true          # fix all capacities to the solved base scenario; only the CI bus may build VRE and battery
+    base_scenario: base
+    curtailed_import: true  # otherwise curtailed grid VRE (same country/hour) may be imported and counts as matched
+    max_excess_share: 0.1   # e.g. 0.1 to cap excess sales to the grid at 10% of consumption
 
 # power plant grouping: one link per node and fuel, matching the PEMMDB thermal categories
 sector:
@@ -98,18 +109,6 @@ sector:
     OCGT: {old: 0.35, new: 0.42}
     oil: {light: 0.35, heavy old 1: 0.35, heavy old 2: 0.40, shale old: 0.29, shale new: 0.39}
   conventional_generation_ccs_capture_rate: 0.9
-
-# hourly matching of the additional 100 MW load; enabled per scenario via target > 0 (config/scenarios.yaml)
-industry:
-  hourly_matching:
-    mode: hourly            # matching granularity: hourly | daily | weekly | monthly | annual
-    target_scope: period    # period: target met in every period; annual: target = annual share matched at that granularity
-    carriers: [onwind, solar]
-    storage: [battery]
-    fix_base: true          # fix all capacities to the solved base scenario; only the CI bus may build VRE and battery
-    base_scenario: base
-    curtailed_import: true  # otherwise curtailed grid VRE (same country/hour) may be imported and counts as matched
-    max_excess_share: 0.2   # e.g. 0.2 to cap excess sales to the grid at 20% of consumption
 
 plotting:
   tech_colors:
