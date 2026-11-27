@@ -40,13 +40,11 @@ import xarray as xr
 from pypsa.clustering.spatial import DEFAULT_ONE_PORT_STRATEGIES, normed_or_uniform
 
 from scripts._helpers import (
-    PYPSA_V1,
     rename_techs,
     update_p_nom_max,
 )
 
-if PYPSA_V1:
-    pypsa.options.params.add.return_names = True
+pypsa.options.params.add.return_names = True
 
 SECTOR_CARRIERS = {
     "OCGT",
@@ -111,8 +109,6 @@ STORE_LOOKUP: dict[str, dict[str, str | float]] = {
     },
 }
 
-idx = pd.IndexSlice
-
 logger = logging.getLogger(__name__)
 
 
@@ -135,40 +131,6 @@ def normed(s: pd.Series) -> pd.Series:
 
 def flatten(t: Iterable[Any]) -> str:
     return " ".join(map(str, t))
-
-
-def calculate_annuity(n: float, r: float | pd.Series) -> float | pd.Series:
-    """
-    Calculate the annuity factor for an asset with lifetime n years and discount rate r.
-
-    The annuity factor is used to calculate the annual payment required to pay off a loan
-    over n years at interest rate r. For example, annuity(20, 0.05) * 20 = 1.6.
-
-    Parameters
-    ----------
-    n : float
-        Lifetime of the asset in years
-    r : float | pd.Series
-        Discount rate (interest rate). Can be a single float or a pandas Series of rates.
-
-    Returns
-    -------
-    float | pd.Series
-        Annuity factor. Returns a float if r is float, or pd.Series if r is pd.Series.
-
-    Examples
-    --------
-    >>> calculate_annuity(20, 0.05)
-    0.08024258718774728
-    """
-    if isinstance(r, pd.Series):
-        return pd.Series(1 / n, index=r.index).where(
-            r == 0, r / (1.0 - 1.0 / (1.0 + r) ** n)
-        )
-    elif r > 0:
-        return r / (1.0 - 1.0 / (1.0 + r) ** n)
-    else:
-        return 1 / n
 
 
 def add_missing_carriers(n: pypsa.Network, carriers: Iterable[str]) -> None:
@@ -830,7 +792,7 @@ def attach_hydro(
     if "PHS" in carriers and not phs.empty:
         # fill missing max hours to params value and
         # assume no natural inflow due to lack of data
-        max_hours = params.get("PHS_max_hours", 6)
+        max_hours = params["PHS_max_hours"]
         phs = phs.replace({"max_hours": {0: max_hours, np.nan: max_hours}})
         n.add(
             "StorageUnit",
@@ -846,7 +808,7 @@ def attach_hydro(
         )
 
     if "hydro" in carriers and not hydro.empty:
-        hydro_max_hours = params.get("hydro_max_hours")
+        hydro_max_hours = params["hydro_max_hours"]
 
         assert hydro_capacities is not None, "No path for hydro capacities given."
 
@@ -882,8 +844,8 @@ def attach_hydro(
             listed_max_hours.where(listed_max_hours > 0)
         ).fillna(6)
 
-        if params.get("flatten_dispatch", False):
-            buffer = params.get("flatten_dispatch_buffer", 0.2)
+        if params["flatten_dispatch"]:
+            buffer = params["flatten_dispatch_buffer"]
             average_capacity_factor = inflow_t[hydro.index].mean() / hydro["p_nom"]
             p_max_pu = (average_capacity_factor + buffer).clip(upper=1)
         else:
@@ -1318,7 +1280,7 @@ def main(
 
     if "hydro" in renewable_carriers:
         p = params.renewable["hydro"].copy()
-        carriers = p.pop("carriers", [])
+        carriers = p.pop("carriers")
         attach_hydro(
             n,
             costs,

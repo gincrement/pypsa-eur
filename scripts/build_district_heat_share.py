@@ -29,8 +29,8 @@ from scripts._helpers import (
     configure_logging,
     select_year_with_fallback,
     set_scenario_config,
+    get,
 )
-from scripts.prepare_sector_network import get
 
 logger = logging.getLogger(__name__)
 

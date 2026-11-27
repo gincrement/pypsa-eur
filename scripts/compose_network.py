@@ -47,11 +47,11 @@ from scripts.prepare_network import main as prepare_network_for_solving
 from scripts.prepare_perfect_foresight import apply_phase_outs
 from scripts.prepare_perfect_foresight import main as prepare_perfect_foresight
 from scripts.prepare_sector_network import (
+    main as add_sector_components,
     add_additional_flat_load,
 )
-from scripts.prepare_sector_network import (
-    main as add_sector_components,
-)
+from scripts.prepare_sector_network import cluster_heat_buses
+from scripts.prepare_sector_network import main as add_sector_components
 
 logger = logging.getLogger(__name__)
 
@@ -100,17 +100,16 @@ if __name__ == "__main__":
         add_sector_components(n, inputs, params, costs, nyears, current_horizon)
 
     # in both electricity-only and sector-coupled mode
-    add_additional_flat_load(
+    n = add_additional_flat_load(
         n,
         params.industry.get("additional_flat_load", {}),
         params.industry.get("hourly_matching", {}),
         costs,
     )
-
-    apply_temporal_aggregation(n, inputs, params)
+    n = apply_temporal_aggregation(n, inputs, params)
 
     renewable_carriers = sorted(
-        set(params.renewable_carriers)
+        set(params.electricity["renewable_carriers"])
         | (
             SECTOR_RENEWABLE_CARRIERS
             & (set(n.generators.carrier) | set(n.links.carrier))
@@ -124,7 +123,10 @@ if __name__ == "__main__":
                 n, str(current_horizon), renewable_carriers
             )
 
-    prepare_network_for_solving(n, inputs, params, costs, nyears, current_horizon)
+    if sector_mode and params.sector["cluster_heat_buses"]:
+        cluster_heat_buses(n)
+
+    prepare_network_for_solving(n, inputs, params, nyears, current_horizon)
 
     if foresight == "myopic" and not is_first_horizon:
         apply_brownfield(
