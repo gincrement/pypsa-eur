@@ -1621,6 +1621,9 @@ data:
   gem_gcct:
     source: archive
     version: latest
+  pemmdb:
+    source: primary
+    version: latest
   gem_gct:
     source: archive
     version: latest
