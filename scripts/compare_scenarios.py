@@ -190,7 +190,7 @@ def plot_prices(prices: pd.DataFrame, meta: dict, horizon, pdf: PdfPages) -> Non
     """
     Prices grouped by target country: per country the base's average price
     next to the price at the bus of the additional load of each scenario
-    (one bar per hourly matching target), and the differences to the base.
+    (one bar per hourly matching target), and their differences to the base.
     """
     avg = prices.xs("price time-weighted", level="metric")  # (scenario, country)
     if avg.empty:
@@ -219,14 +219,13 @@ def plot_prices(prices: pd.DataFrame, meta: dict, horizon, pdf: PdfPages) -> Non
     base = avg["base"].groupby(level="country").first().sort_index()
     add_price = by_country(add["value"])
     add_diff = by_country(add["difference"])
-    avg_diff = by_country(avg["difference"])
 
     colors = plt.cm.Reds(np.linspace(0.35, 0.9, len(order)))
     width = min(0.85, 0.25 * (len(order) + 1))
-    fig, (ax1, ax2, ax3) = plt.subplots(
-        3,
+    fig, (ax1, ax2) = plt.subplots(
+        2,
         1,
-        figsize=(max(7, (0.3 * len(order) + 0.6) * len(base) + 3), 10),
+        figsize=(max(7, (0.3 * len(order) + 0.6) * len(base) + 3), 7),
         sharex=True,
     )
     pd.concat([base.rename("base: country average"), add_price], axis=1).plot.bar(
@@ -238,15 +237,9 @@ def plot_prices(prices: pd.DataFrame, meta: dict, horizon, pdf: PdfPages) -> Non
     )
     add_diff.plot.bar(ax=ax2, width=width * len(order) / (len(order) + 1), color=colors)
     ax2.set_ylabel("additional load bus:\ndifference to base [EUR/MWh]")
-    avg_diff.plot.bar(
-        ax=ax3,
-        width=width * len(order) / (len(order) + 1),
-        color=plt.cm.Blues(np.linspace(0.35, 0.9, len(order))),
-    )
-    ax3.set_ylabel("country average:\ndifference to base [EUR/MWh]")
-    ax3.set_xlabel("")
-    ax3.tick_params(axis="x", labelrotation=0)
-    for ax in (ax1, ax2, ax3):
+    ax2.set_xlabel("")
+    ax2.tick_params(axis="x", labelrotation=0)
+    for ax in (ax1, ax2):
         ax.axhline(0, color="k", lw=0.8)
         ax.grid(axis="y", alpha=0.3)
         ax.legend(fontsize="small", ncol=len(order) + 1)

@@ -34,8 +34,8 @@ clustering:
   administrative:
     level: bz                 # based on bidding zone's
   temporal:
-    averaging: 6h # false     # 6h for testing
-  consider_efficiency_classes: true # [0.30, 0.70] # bool | list[float] = False,
+    averaging: false          # 6h for testing
+  consider_efficiency_classes: true # bool | list[float] = False,
 
 solving:
   options:

@@ -1340,9 +1340,13 @@ solving:
           UK00:
           - GB
           - GB00
+          - GBZE # Shetland
           UKNI:
           - GBI
           - GBNI
+          ES00: # PEMMDB ES00 includes the Balearic Islands
+          - ES00
+          - ESMA
         technology_map:
           ^nuclear:
           - nuclear
