@@ -1,0 +1,12 @@
+# base case 
+base: {}
+
+# ----- Scenario settings -----
+# <ct>-100MW-hm<level> ... with hourly matching <level>
+
+# ----- DE Germany
+DE-100MW-hm80:
+  industry:
+    additional_flat_load: {DE: 100}
+    hourly_matching:
+      target: 0.8

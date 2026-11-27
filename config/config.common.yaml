@@ -34,7 +34,7 @@ clustering:
   administrative:
     level: bz                 # based on bidding zone's
   temporal:
-    averaging: false          # 6h for testing
+    averaging: 3h # false     # 6h for testing
   consider_efficiency_classes: true # bool | list[float] = False,
 
 solving:
@@ -60,6 +60,7 @@ solving:
   solver:
     name: "gurobi"             # default solver is gurobi, could be "highs"
     options: "gurobi-default"  # ... and "highs-default"
+    # options: "gurobi-numeric-focus"
 
 # hourly matching of the additional 100 MW load; enabled per scenario via target > 0 (config/scenarios.yaml)
 industry:

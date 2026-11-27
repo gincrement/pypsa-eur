@@ -429,3 +429,31 @@ if config["run"].get("scenarios", {}).get("enable", False):
                 COMPARISON + "{horizon}/comparison.pdf",
                 horizon=config["planning_horizons"],
             ),
+
+    rule electronbank_steps:
+        """Runs the electronbank post-processing steps."""
+        input:
+            networks=lambda w: [
+                RESULTS.format(run=run) + f"networks/solved_{w.horizon}.nc"
+                for run in config["run"]["name"]
+            ],
+        output:
+            prices=COMPARISON + "{horizon}/prices.csv",
+            capacities=COMPARISON + "{horizon}/capacities.csv",
+            capacity_difference=COMPARISON + "{horizon}/capacity_difference.csv",
+            plot=COMPARISON + "{horizon}/comparison.pdf",
+        log:
+            COMPARISON + "{horizon}/logs/compare_scenarios.log",
+        benchmark:
+            COMPARISON + "{horizon}/benchmarks/compare_scenarios"
+        threads: 2
+        resources:
+            mem_mb=8000,
+        params:
+            runs=lambda w: [(run, int(w.horizon)) for run in config["run"]["name"]],
+            base_scenario="base",
+            scenarios={run: _scenario_targets(run) for run in config["run"]["name"]},
+            threshold=0.1,  # MW / MWh, rows kept in capacity_difference.csv
+            plot_threshold=1.0,  # MW / MWh, rows shown in comparison.pdf
+        script:
+            scripts("electronbank/steps.py")
